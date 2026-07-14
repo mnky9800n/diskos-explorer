@@ -1,9 +1,12 @@
 # Web front end
 
-The **backend** exists and is tested: a FastAPI app in `src/diskos/web/` that
-reuses the pipeline modules (`io`, `palyno`, `wells`) and gates every data
-endpoint behind Google OAuth + an email allowlist. The **front-end UI** (the
-actual pages Jack clicks) is the remaining piece.
+A FastAPI app in `src/diskos/web/` that reuses the pipeline modules (`io`,
+`palyno`, `wells`) and gates every data endpoint behind Google OAuth + an email
+allowlist. It also serves a self-contained SPA (`src/diskos/web/static/`) at `/`:
+a borehole/strip-log UI with a well inventory rail and a depth-track chart of
+species counts vs depth (depth increasing downward), plus a data table and any
+pending same/different name decisions. No build step, no external assets. The one
+remaining piece is real Google OAuth credentials (dev mode works today).
 
 ## Run it (dev mode, no Google needed)
 

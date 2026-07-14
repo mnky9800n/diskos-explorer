@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DISKOS Explorer</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2312161d'/%3E%3Crect x='6' width='4' height='16' fill='%23c17f10'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <!-- Signed-out gate -->
+  <div id="gate" class="gate" hidden>
+    <div class="gate-card">
+      <div class="gate-mark" aria-hidden="true"></div>
+      <h1>DISKOS Explorer</h1>
+      <p>Borehole data from the Norwegian DISKOS archive: palynology, well logs, and
+         the wiki built over them.</p>
+      <a id="signin" class="btn-signin" href="/auth/login">Sign in with Google</a>
+      <p id="gate-note" class="gate-note"></p>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">DISKOS <b>Explorer</b></span>
+      </div>
+      <div class="topbar-right">
+        <span id="user" class="user"></span>
+        <button id="theme" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">◐</button>
+        <a id="logout" class="logout" href="/auth/logout">Sign out</a>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="rail">
+        <div class="rail-head">
+          <label class="rail-label" for="filter">Wells</label>
+          <input id="filter" class="filter" type="search" placeholder="Filter by ID" autocomplete="off" />
+        </div>
+        <div id="welllist" class="welllist" role="listbox" aria-label="Boreholes"></div>
+      </aside>
+
+      <main id="main" class="main">
+        <div id="empty" class="empty">
+          <div class="empty-rule" aria-hidden="true"></div>
+          <p>Select a well to read its palynology against depth.</p>
+        </div>
+        <section id="well" class="well" hidden></section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

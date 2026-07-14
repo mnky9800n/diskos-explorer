@@ -11,11 +11,16 @@ this exposes the JSON the UI will consume.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 from .. import wells as wells_mod
 from ..config import load_config
@@ -76,6 +81,14 @@ def create_app() -> FastAPI:
     def health() -> dict:
         return {"status": "ok", "dev_mode": dev_mode()}
 
+    @app.get("/api/me")
+    def me(user: str = Depends(current_user)) -> dict:
+        return {"email": user, "dev_mode": dev_mode()}
+
+    @app.get("/")
+    def index() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html")
+
     @app.get("/api/wells")
     def list_wells(user: str = Depends(current_user)) -> list[dict]:
         root = diskos_root(load_config())
@@ -107,6 +120,10 @@ def create_app() -> FastAPI:
     @app.get("/api/wells/{well_id}/palynology")
     def well_palynology(well_id: str, user: str = Depends(current_user)) -> dict:
         return {"well_id": well_id, "files": _well_palynology(well_id)}
+
+    # Static assets (styles, script). Mounted last so it never shadows /api routes.
+    if STATIC_DIR.is_dir():
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     return app
 
