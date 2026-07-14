@@ -17,11 +17,24 @@ class FakeClient:
         return "Canned answer grounded in the report."
 
 
-def test_build_prompt_includes_question_and_context():
-    p = assistant.build_prompt("35_9-1", {"logs": 1, "geology": 2}, "excerpt text here", "What ages?")
-    assert "35_9-1" in p
-    assert "What ages?" in p
-    assert "excerpt text here" in p
+def test_build_prompt_includes_inventory_logs_and_reports():
+    p = assistant.build_prompt("35_9-1", "- logs (1): a.LAS", "GR mean 70 API", "excerpt text here", "What ages?")
+    assert "35_9-1" in p and "What ages?" in p
+    assert "a.LAS" in p          # inventory
+    assert "GR mean 70 API" in p  # log summary
+    assert "excerpt text here" in p  # report excerpts
+
+
+def test_format_inventory_lists_types():
+    well = wells.well_files(SAMPLE_ROOT, "35_9-1")
+    inv = assistant.format_inventory(well)
+    assert "geology" in inv and "images" in inv
+
+
+def test_summarize_logs_reports_gamma():
+    well = wells.well_files(SAMPLE_ROOT, "7_11-1")
+    summary = assistant.summarize_logs(well)
+    assert "GR" in summary  # gamma curve detected from the LAS
 
 
 def test_extract_report_text_notes_scans(tmp_path):
