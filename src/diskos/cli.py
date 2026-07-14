@@ -1,14 +1,18 @@
 """Command-line entrypoints for diskosAI.
 
-    diskos wells                     -- print the discovered borehole catalog
-    diskos stratabugs --all          -- palynology pipeline over every well
-    diskos stratabugs --well ID      -- ... over one well
-    diskos taxa suggest --well ID    -- suggest target species from the data
-    diskos taxa review               -- list similar names awaiting a decision
-    diskos taxa decide T V same|different  -- record a same/different call
+    diskos wells [--detail]          -- list discovered wells (2700+ in the archive)
+    diskos well <id>                 -- one well's files by data type
+    diskos logs --well ID | --all    -- plot gamma/log tracks from LAS
+    diskos stratabugs --in DIR       -- curated StrataBugs .ASC -> per-well CSV
+    diskos taxa suggest --in DIR     -- suggest target species from curated .ASC
+    diskos taxa review --in DIR      -- similar names awaiting a same/different call
+    diskos taxa decide T V same|different
+    diskos wiki ingest|search        -- knowledge-base operations
+    diskos serve                     -- run the web API
 
-Every command resolves the DISKOS root from config and discovers wells via the
-catalog, so nothing is tied to specific boreholes.
+The DISKOS mirror is one directory per well, classified by data type. Curated
+StrataBugs palynology is a separate bring-your-own input (``--in`` a folder of
+``.ASC`` exports), since the raw mirror stores palynology only as biostrat PDFs.
 """
 
 from __future__ import annotations
@@ -32,100 +36,139 @@ app.add_typer(taxa_app, name="taxa")
 wiki_app = typer.Typer(help="Wiki: ingest pipeline artifacts into the knowledge base.", no_args_is_help=True)
 app.add_typer(wiki_app, name="wiki")
 
-
-def _select_wells(root: Path, well: str | None, all_wells: bool) -> dict[str, wells_mod.Well]:
-    catalog = wells_mod.catalog(root)
-    if all_wells:
-        return catalog
-    if well:
-        if well not in catalog:
-            known = ", ".join(sorted(catalog)) or "(none)"
-            typer.echo(f"Well {well!r} not found. Known: {known}", err=True)
-            raise typer.Exit(code=1)
-        return {well: catalog[well]}
-    typer.echo("Specify --well <id> or --all.", err=True)
-    raise typer.Exit(code=1)
+CURATED_DEFAULT = Path("data/palynology")
 
 
-def _available_taxa(entry: wells_mod.Well) -> list[str]:
-    """Union of taxon names across a well's .ASC palynology files."""
-    names: set[str] = set()
-    for asc_path in entry.paly:
-        obs = parse_stratabugs_simple(asc_path)["observations"]
-        if not obs.empty:
-            names.update(obs["taxon_name"].dropna().tolist())
-    return sorted(names)
+def _curated_ascs(in_dir: Path) -> list[Path]:
+    """Curated StrataBugs .ASC exports in a directory."""
+    return sorted(p for p in in_dir.glob("*") if p.suffix.lower() == ".asc")
 
 
 @app.command()
-def wells() -> None:
-    """Discover and print the borehole catalog (which data each well has)."""
+def wells(detail: bool = typer.Option(False, "--detail", help="Recurse each well for data-type counts (slow on the full archive).")) -> None:
+    """List discovered wells (well = top-level directory)."""
     root = diskos_root(load_config())
-    catalog = wells_mod.catalog(root)
-    if not catalog:
-        typer.echo(f"No wells discovered under {root}")
-        raise typer.Exit(code=0)
+    ids = wells_mod.list_well_ids(root)
+    typer.echo(f"{len(ids)} wells discovered under {root}\n")
+    if detail:
+        for wid in ids:
+            counts = wells_mod.well_files(root, wid).counts()
+            typer.echo(f"  {wid:<18} " + " ".join(f"{t}={n}" for t, n in counts.items()))
+        return
+    for wid in ids[:40]:
+        typer.echo(f"  {wid}")
+    if len(ids) > 40:
+        typer.echo(f"  ... and {len(ids) - 40} more (use `diskos well <id>`)")
 
-    typer.echo(f"{len(catalog)} wells discovered under {root}:\n")
-    for well_id in sorted(catalog):
-        well = catalog[well_id]
-        typer.echo(
-            f"  {well_id:<14} paly={len(well.paly)} logs={len(well.logs)} xrf={len(well.xrf)}"
-        )
+
+@app.command()
+def well(well_id: str = typer.Argument(..., help="Well ID, e.g. 35_10-8_S.")) -> None:
+    """Show one well's files grouped by data type."""
+    root = diskos_root(load_config())
+    if well_id not in wells_mod.list_well_ids(root):
+        typer.echo(f"Well {well_id!r} not found under {root}.", err=True)
+        raise typer.Exit(code=1)
+    w = wells_mod.well_files(root, well_id)
+    typer.echo(f"{well_id}: {w.total()} files")
+    for data_type, paths in w.files.items():
+        typer.echo(f"  {data_type} ({len(paths)})")
+        for p in paths[:8]:
+            typer.echo(f"    {p.name}")
+        if len(paths) > 8:
+            typer.echo(f"    ... {len(paths) - 8} more")
+
+
+@app.command()
+def logs(
+    well: str = typer.Option(None, "--well", help="Plot one borehole by ID."),
+    all_wells: bool = typer.Option(False, "--all", help="Plot every borehole with logs."),
+    mnemonic: str = typer.Option(None, "--mnemonic", help="Curve mnemonic (default: gamma)."),
+    top: float = typer.Option(None, "--top", help="Top depth (m)."),
+    bottom: float = typer.Option(None, "--bottom", help="Bottom depth (m)."),
+    out_path: Path = typer.Option(Path("out/logs.png"), "--out", help="Output figure path."),
+) -> None:
+    """Plot gamma (or a chosen curve) as depth-aligned color tracks for correlation."""
+    from .welllog import curves as wl_curves
+    from .welllog import plot as wl_plot
+
+    root = diskos_root(load_config())
+    if well:
+        well_ids = [well]
+    elif all_wells:
+        well_ids = wells_mod.list_well_ids(root)
+    else:
+        typer.echo("Specify --well <id> or --all.", err=True)
+        raise typer.Exit(code=1)
+
+    tracks = {}
+    for well_id in well_ids:
+        try:
+            w = wells_mod.well_files(root, well_id)
+        except KeyError:
+            continue
+        las_files = w.files.get("logs", [])
+        if not las_files:
+            continue
+        df = wl_curves.read_las(las_files[0])
+        try:
+            name = mnemonic or wl_curves.gamma_column(df)
+        except KeyError:
+            continue
+        tracks[f"{well_id}:{name}"] = wl_curves.slice_depth(wl_curves.curve_series(df, name), top, bottom)
+
+    if not tracks:
+        typer.echo("No wells with logs in the selection.", err=True)
+        raise typer.Exit(code=1)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    wl_plot.plot_correlation(tracks, out_path=out_path)
+    typer.echo(f"Wrote {out_path} ({len(tracks)} track(s))")
 
 
 @app.command()
 def stratabugs(
-    well: str = typer.Option(None, "--well", help="Run one borehole by ID (e.g. 35_10-8)."),
-    all_wells: bool = typer.Option(False, "--all", help="Run every discovered borehole."),
-    targets: str = typer.Option(
-        None, "--targets", help="Comma-separated target taxa (default: the built-in TARGETS)."
-    ),
+    in_dir: Path = typer.Option(CURATED_DEFAULT, "--in", help="Directory of curated StrataBugs .ASC exports."),
+    targets: str = typer.Option(None, "--targets", help="Comma-separated target taxa (default: built-in TARGETS)."),
     out: Path = typer.Option(Path("out"), "--out", help="Output directory for per-well CSVs."),
 ) -> None:
-    """Parse .ASC palynology files -> reconcile target taxa -> wide CSV per well.
+    """Curated StrataBugs .ASC -> reconcile target taxa -> wide CSV per file.
 
-    Exact genus+species names merge automatically; only similar names that have a
-    recorded same/different decision are merged. Undecided similar names are held
-    apart and reported (run `diskos taxa review`).
+    Exact genus+species names merge automatically; only similar names with a
+    recorded same/different decision are merged (run `diskos taxa review`).
     """
     cfg = load_config()
-    root = diskos_root(cfg)
     target_list = [t.strip() for t in targets.split(",")] if targets else TARGETS
     decisions = reconcile.Decisions.load(cfg.decisions_path())
 
-    selected = _select_wells(root, well, all_wells)
+    ascs = _curated_ascs(in_dir)
+    if not ascs:
+        typer.echo(f"No .ASC files in {in_dir}.", err=True)
+        raise typer.Exit(code=1)
     out.mkdir(parents=True, exist_ok=True)
 
     written = 0
     pending: dict[tuple[str, str], float] = {}
-    for well_id in sorted(selected):
-        entry = selected[well_id]
-        for asc_path in entry.paly:
-            obs = parse_stratabugs_simple(asc_path)["observations"]
-            if obs.empty:
-                typer.echo(f"  {asc_path.name}: no observations, skipped")
-                continue
-            available = sorted(obs["taxon_name"].dropna().unique().tolist())
-            result = reconcile.resolve_matches(target_list, available, decisions)
-            for pair in result.pending:
-                pending[(pair.target, pair.variant)] = pair.similarity
-
-            wide = create_wide_format(obs, result.mapping)
-            if wide.empty or wide.shape[1] == 0:
-                typer.echo(f"  {asc_path.name}: no target matches, skipped")
-                continue
-            out_path = out / f"{asc_path.stem}.csv"
-            wide.to_csv(out_path, index=True)
-            typer.echo(f"  {asc_path.name} -> {out_path} ({wide.shape[0]} depths, {wide.shape[1]} cols)")
-            written += 1
+    for asc_path in ascs:
+        obs = parse_stratabugs_simple(asc_path)["observations"]
+        if obs.empty:
+            typer.echo(f"  {asc_path.name}: no observations, skipped")
+            continue
+        available = sorted(obs["taxon_name"].dropna().unique().tolist())
+        result = reconcile.resolve_matches(target_list, available, decisions)
+        for pair in result.pending:
+            pending[(pair.target, pair.variant)] = pair.similarity
+        wide = create_wide_format(obs, result.mapping)
+        if wide.empty or wide.shape[1] == 0:
+            typer.echo(f"  {asc_path.name}: no target matches, skipped")
+            continue
+        out_path = out / f"{asc_path.stem}.csv"
+        wide.to_csv(out_path, index=True)
+        typer.echo(f"  {asc_path.name} -> {out_path} ({wide.shape[0]} depths, {wide.shape[1]} cols)")
+        written += 1
 
     typer.echo(f"\nWrote {written} CSV file(s) to {out}")
     if pending:
-        typer.echo(
-            f"{len(pending)} similar name(s) need a same/different decision "
-            f"before they can be merged. Run `diskos taxa review`."
-        )
+        typer.echo(f"{len(pending)} similar name(s) need a same/different decision. Run `diskos taxa review`.")
 
 
 @app.command()
@@ -151,63 +194,21 @@ def plot(
     typer.echo(f"Wrote {out_path} ({len(frames)} well(s))")
 
 
-@app.command()
-def logs(
-    well: str = typer.Option(None, "--well", help="Plot one borehole by ID."),
-    all_wells: bool = typer.Option(False, "--all", help="Plot every borehole with logs."),
-    mnemonic: str = typer.Option(None, "--mnemonic", help="Curve mnemonic (default: gamma)."),
-    top: float = typer.Option(None, "--top", help="Top depth (m)."),
-    bottom: float = typer.Option(None, "--bottom", help="Bottom depth (m)."),
-    out_path: Path = typer.Option(Path("out/logs.png"), "--out", help="Output figure path."),
-) -> None:
-    """Plot gamma (or a chosen curve) as depth-aligned color tracks for correlation."""
-    from .welllog import curves as wl_curves
-    from .welllog import plot as wl_plot
-
-    root = diskos_root(load_config())
-    selected = _select_wells(root, well, all_wells)
-
-    tracks = {}
-    for well_id in sorted(selected):
-        entry = selected[well_id]
-        if not entry.logs:
-            continue
-        df = wl_curves.read_las(entry.logs[0])
-        name = mnemonic or wl_curves.gamma_column(df)
-        series = wl_curves.slice_depth(wl_curves.curve_series(df, name), top, bottom)
-        tracks[f"{well_id}:{name}"] = series
-
-    if not tracks:
-        typer.echo("No wells with logs in the selection.", err=True)
-        raise typer.Exit(code=1)
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    wl_plot.plot_correlation(tracks, out_path=out_path)
-    typer.echo(f"Wrote {out_path} ({len(tracks)} track(s))")
-
-
 @taxa_app.command("suggest")
 def taxa_suggest(
-    well: str = typer.Option(None, "--well", help="Suggest from one borehole."),
-    all_wells: bool = typer.Option(False, "--all", help="Suggest from every borehole."),
+    in_dir: Path = typer.Option(CURATED_DEFAULT, "--in", help="Directory of curated .ASC exports."),
     top: int = typer.Option(20, "--top", help="How many suggestions to show."),
 ) -> None:
-    """Suggest target species from what is actually in the selected wells, ranked
-    by prevalence, so you can pick rather than maintain a list by hand."""
+    """Suggest target species from the curated .ASC files, ranked by prevalence."""
     import pandas as pd
 
-    cfg = load_config()
-    root = diskos_root(cfg)
-    selected = _select_wells(root, well, all_wells)
-
     frames = []
-    for entry in selected.values():
-        for asc_path in entry.paly:
-            obs = parse_stratabugs_simple(asc_path)["observations"]
-            if not obs.empty:
-                frames.append(obs)
+    for asc_path in _curated_ascs(in_dir):
+        obs = parse_stratabugs_simple(asc_path)["observations"]
+        if not obs.empty:
+            frames.append(obs)
     if not frames:
-        typer.echo("No palynology observations found in the selection.")
+        typer.echo(f"No palynology observations in {in_dir}.")
         raise typer.Exit(code=0)
 
     suggestions = suggest_targets(pd.concat(frames, ignore_index=True), top_n=top)
@@ -215,38 +216,32 @@ def taxa_suggest(
     typer.echo(f"  {'depths':>6}  {'count':>7}  species")
     for s in suggestions:
         typer.echo(f"  {s.n_depths:>6}  {s.total_count:>7}  {s.name}")
-    typer.echo("\nCopy the ones you want into src/diskos/palyno/targets.py (or --targets).")
 
 
 @taxa_app.command("review")
 def taxa_review(
-    well: str = typer.Option(None, "--well", help="Review one borehole."),
-    all_wells: bool = typer.Option(True, "--all/--one", help="Review every borehole (default)."),
+    in_dir: Path = typer.Option(CURATED_DEFAULT, "--in", help="Directory of curated .ASC exports."),
 ) -> None:
     """List similar taxon names awaiting a human same/different decision."""
     cfg = load_config()
-    root = diskos_root(cfg)
     decisions = reconcile.Decisions.load(cfg.decisions_path())
-    selected = _select_wells(root, well, all_wells and not well)
 
-    pending: dict[tuple[str, str], float] = {}
-    for entry in selected.values():
-        available = _available_taxa(entry)
-        result = reconcile.resolve_matches(TARGETS, available, decisions)
-        for pair in result.pending:
-            pending[(pair.target, pair.variant)] = pair.similarity
+    names: set[str] = set()
+    for asc_path in _curated_ascs(in_dir):
+        obs = parse_stratabugs_simple(asc_path)["observations"]
+        if not obs.empty:
+            names.update(obs["taxon_name"].dropna().tolist())
 
-    if not pending:
+    result = reconcile.resolve_matches(TARGETS, sorted(names), decisions)
+    if not result.pending:
         typer.echo("No similar names pending a decision.")
         raise typer.Exit(code=0)
 
+    pending = {(p.target, p.variant): p.similarity for p in result.pending}
     typer.echo(f"{len(pending)} similar name(s) awaiting a same/different decision:\n")
     for (target, variant), sim in sorted(pending.items(), key=lambda kv: kv[1], reverse=True):
         typer.echo(f"  sim={sim:.2f}  target={target!r}  variant={variant!r}")
-    typer.echo(
-        "\nRecord a call with:\n"
-        "  diskos taxa decide \"<target>\" \"<variant>\" same|different"
-    )
+    typer.echo('\nRecord: diskos taxa decide "<target>" "<variant>" same|different')
 
 
 @taxa_app.command("decide")

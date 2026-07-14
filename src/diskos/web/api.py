@@ -14,7 +14,6 @@ import os
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,45 +23,34 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 from .. import wells as wells_mod
 from ..config import load_config
-from ..io.stratabugs import parse_stratabugs_simple
-from ..palyno import reconcile
-from ..palyno.aggregate import create_wide_format
-from ..palyno.targets import TARGETS
 from ..paths import diskos_root
 from .auth import current_user, dev_mode
-
-
-def _records(wide: pd.DataFrame) -> list[dict]:
-    """Wide depth-indexed frame -> JSON-safe list of row dicts (NaN -> null)."""
-    frame = wide.reset_index()
-    frame = frame.astype(object).where(pd.notna(frame), None)
-    return frame.to_dict(orient="records")
 
 
 def _downsample(index, values, max_points: int = 1500):
     """Evenly thin two parallel sequences to at most ``max_points`` pairs."""
     n = len(index)
-    if n <= max_points:
-        step = 1
-    else:
-        step = int(np.ceil(n / max_points))
+    step = 1 if n <= max_points else int(np.ceil(n / max_points))
     return list(index[::step]), list(values[::step])
 
 
 def _well_or_404(well_id: str):
+    """Resolve one well's categorized files, or 404. Recurses only that well."""
     root = diskos_root(load_config())
-    catalog = wells_mod.catalog(root)
-    if well_id not in catalog:
+    if well_id not in wells_mod.list_well_ids(root):
         raise HTTPException(status_code=404, detail=f"Well {well_id} not found.")
-    return catalog[well_id]
+    return wells_mod.well_files(root, well_id)
 
 
 def _well_logs(well_id: str, mnemonic: str | None) -> list[dict]:
     from ..welllog import curves as wl
 
     files = []
-    for las in _well_or_404(well_id).logs:
-        df = wl.read_las(las)
+    for las in _well_or_404(well_id).files.get("logs", []):
+        try:
+            df = wl.read_las(las)
+        except Exception:
+            continue  # unreadable / non-LAS content; skip rather than 500
         mnems = wl.available_mnemonics(df)
         gamma = None
         try:
@@ -79,56 +67,6 @@ def _well_logs(well_id: str, mnemonic: str | None) -> list[dict]:
                 "points": [{"depth": float(d), "value": float(v)} for d, v in zip(depths, values)],
             })
         files.append({"file": las.name, "mnemonics": mnems, "gamma": gamma, "tracks": tracks})
-    return files
-
-
-def _well_xrf(well_id: str, depth: int | None, range_type: str) -> list[dict]:
-    from ..xrf import fit as xrf
-
-    files = []
-    for csv in _well_or_404(well_id).xrf:
-        df = xrf.read_niton_csv(csv)
-        depths, ranges = xrf.depths_and_ranges(df)
-        rt = range_type if range_type in ranges else (ranges[0] if ranges else "")
-        d = depth if depth in depths else (depths[0] if depths else None)
-        spectrum = None
-        label = f"{d}m ({rt})"
-        if d is not None and label in df.index:
-            energy = xrf.energy_axis(df)
-            counts = df.loc[label].to_numpy(dtype=float)
-            e, c = _downsample(list(energy), list(counts), max_points=1200)
-            spectrum = {"depth": d, "range": rt, "energy": [float(x) for x in e], "counts": [float(x) for x in c]}
-        files.append({"file": csv.name, "depths": depths, "ranges": ranges, "spectrum": spectrum})
-    return files
-
-
-def _well_palynology(well_id: str) -> list[dict]:
-    cfg = load_config()
-    root = diskos_root(cfg)
-    catalog = wells_mod.catalog(root)
-    if well_id not in catalog:
-        raise HTTPException(status_code=404, detail=f"Well {well_id} not found.")
-    decisions = reconcile.Decisions.load(cfg.decisions_path())
-
-    files = []
-    for asc in catalog[well_id].paly:
-        obs = parse_stratabugs_simple(asc)["observations"]
-        if obs.empty:
-            continue
-        available = sorted(obs["taxon_name"].dropna().unique().tolist())
-        result = reconcile.resolve_matches(TARGETS, available, decisions)
-        wide = create_wide_format(obs, result.mapping)
-        files.append(
-            {
-                "file": asc.name,
-                "columns": list(wide.columns),
-                "records": _records(wide),
-                "pending_decisions": [
-                    {"target": p.target, "variant": p.variant, "similarity": p.similarity}
-                    for p in result.pending
-                ],
-            }
-        )
     return files
 
 
@@ -154,48 +92,25 @@ def create_app() -> FastAPI:
 
     @app.get("/api/wells")
     def list_wells(user: str = Depends(current_user)) -> list[dict]:
+        # IDs only; there are thousands of wells, so counts load per-well on demand.
         root = diskos_root(load_config())
-        catalog = wells_mod.catalog(root)
-        return [
-            {
-                "well_id": wid,
-                "paly": len(w.paly),
-                "logs": len(w.logs),
-                "xrf": len(w.xrf),
-            }
-            for wid, w in sorted(catalog.items())
-        ]
+        return [{"well_id": wid} for wid in wells_mod.list_well_ids(root)]
 
     @app.get("/api/wells/{well_id}")
     def well_detail(well_id: str, user: str = Depends(current_user)) -> dict:
-        root = diskos_root(load_config())
-        catalog = wells_mod.catalog(root)
-        if well_id not in catalog:
-            raise HTTPException(status_code=404, detail=f"Well {well_id} not found.")
-        w = catalog[well_id]
+        w = _well_or_404(well_id)
         return {
             "well_id": well_id,
-            "paly": [p.name for p in w.paly],
-            "logs": [p.name for p in w.logs],
-            "xrf": [p.name for p in w.xrf],
+            "counts": w.counts(),
+            "files": {t: [p.name for p in ps] for t, ps in w.files.items()},
+            "biostrat": [
+                p.name for ps in w.files.values() for p in ps if wells_mod.is_biostrat(p)
+            ],
         }
-
-    @app.get("/api/wells/{well_id}/palynology")
-    def well_palynology(well_id: str, user: str = Depends(current_user)) -> dict:
-        return {"well_id": well_id, "files": _well_palynology(well_id)}
 
     @app.get("/api/wells/{well_id}/logs")
     def well_logs(well_id: str, mnemonic: str = None, user: str = Depends(current_user)) -> dict:
         return {"well_id": well_id, "files": _well_logs(well_id, mnemonic)}
-
-    @app.get("/api/wells/{well_id}/xrf")
-    def well_xrf(
-        well_id: str,
-        depth: int = None,
-        range_type: str = "Main Range",
-        user: str = Depends(current_user),
-    ) -> dict:
-        return {"well_id": well_id, "files": _well_xrf(well_id, depth, range_type)}
 
     # Static assets (styles, script). Mounted last so it never shadows /api routes.
     if STATIC_DIR.is_dir():

@@ -31,15 +31,12 @@ def test_list_wells_requires_dev_user_and_returns_catalog(client):
     assert "7_11-1" in ids
 
 
-def test_well_palynology_endpoint(client):
-    resp = client.get("/api/wells/7_11-1/palynology")
+def test_well_detail_categorized(client):
+    resp = client.get("/api/wells/35_9-1")
     assert resp.status_code == 200
-    files = resp.json()["files"]
-    assert files, "expected at least one palynology file"
-    cols = files[0]["columns"]
-    assert any(c.endswith("_cnt") for c in cols)
-    # Similar-but-undecided names are reported for review, not silently merged.
-    assert any(p["variant"] == "Apectodinium homomorphm" for p in files[0]["pending_decisions"])
+    body = resp.json()
+    assert body["counts"] == {"geology": 1, "images": 1}
+    assert body["biostrat"] == ["35_9-1__GEOLOGY__BIOSTRAT_REPORT_1.PDF"]
 
 
 def test_unknown_well_404(client):
@@ -54,18 +51,6 @@ def test_logs_endpoint_returns_gamma_track(client):
     track = files[0]["tracks"][0]
     assert track["mnemonic"] == "GR"
     assert track["points"] and "depth" in track["points"][0] and "value" in track["points"][0]
-
-
-def test_xrf_endpoint_returns_spectrum(client):
-    resp = client.get("/api/wells/25_7-5/xrf")
-    assert resp.status_code == 200
-    files = resp.json()["files"]
-    assert files
-    assert files[0]["depths"] == [1350, 1400]
-    assert "Main Range" in files[0]["ranges"]
-    spec = files[0]["spectrum"]
-    assert spec["range"] == "Main Range"
-    assert len(spec["energy"]) == len(spec["counts"]) > 0
 
 
 def test_allowlist_blocks_non_listed_user(monkeypatch):
