@@ -296,5 +296,24 @@ def wiki_ingest(
     typer.echo(f"\nIngested {len(csvs)} well(s) into {wiki_dir}")
 
 
+@wiki_app.command("search")
+def wiki_search(
+    query: str = typer.Argument(..., help="Search terms."),
+    wiki_dir: Path = typer.Option(Path("wiki"), "--wiki", help="Wiki directory to search."),
+    top: int = typer.Option(5, "--top", help="How many results."),
+) -> None:
+    """Rank wiki pages against a query (local BM25 over page bodies)."""
+    from .wiki.search import search as wiki_search_fn
+
+    results = wiki_search_fn(wiki_dir, query, top_k=top)
+    if not results:
+        typer.echo("No matches.")
+        raise typer.Exit(code=0)
+    for r in results:
+        typer.echo(f"  {r['score']:>7}  {r['path']}")
+        if r["snippet"]:
+            typer.echo(f"           {r['snippet']}")
+
+
 if __name__ == "__main__":
     app()

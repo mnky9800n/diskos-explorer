@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phase 1 built. The repo is a `uv`-managed Python package (`diskos`, src layout) with the palynology data-prep backbone working end to end. Jack's four notebooks are refactored reference under `notebooks/`. Later phases (plotting, well logs, model layer + wiki, web front end, XRF) are scoped in the approved plan but not yet built. Always use `uv` (`uv run`, `uv add`, `uv sync`), never `pip` or bare `python`.
+Most of the roadmap is built. The repo is a `uv`-managed Python package (`diskos`, src layout). Working and tested: palynology pipeline (parse -> reconcile -> wide CSV), human-in-the-loop name reconciliation + target suggestions, palynology plots, well-log (LAS) tracks, the model layer + deterministic wiki ingest, a FastAPI web backend with Google-OAuth/allowlist auth, and local BM25 wiki search. XRF is ported but its PyMca fit path is unverified (no wheels for this Python, no real data here). Jack's four notebooks are refactored reference under `notebooks/`. Not yet done: the web UI + real Google credentials, and qmd/local-search-agent integration. Always use `uv`, never `pip` or bare `python`.
 
 ## Commands
 
@@ -21,6 +21,7 @@ uv run diskos taxa decide "<target>" "<variant>" same   # record a decision
 uv run diskos plot --in out/ --out out/palyno.png       # species-vs-depth figure
 uv run diskos logs --well 7_11-1 --out out/logs.png     # gamma/log tracks (LAS)
 uv run diskos wiki ingest --in out/ --wiki wiki/         # per-well CSV -> wiki pages
+uv run diskos wiki search "Apectodinium" --wiki wiki/    # local BM25 search
 DISKOS_WEB_DEV=1 uv run diskos serve     # web API (needs `web` extra)
 # Point at a sample tree without editing config:
 DISKOS_ROOT=./tests/data/diskos_sample uv run diskos stratabugs --all --out out/
