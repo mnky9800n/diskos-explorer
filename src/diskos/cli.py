@@ -29,6 +29,8 @@ from .paths import diskos_root
 app = typer.Typer(help="Tools for exploring DISKOS petroleum borehole data.", no_args_is_help=True)
 taxa_app = typer.Typer(help="Target species: suggest, review similar names, record decisions.", no_args_is_help=True)
 app.add_typer(taxa_app, name="taxa")
+wiki_app = typer.Typer(help="Wiki: ingest pipeline artifacts into the knowledge base.", no_args_is_help=True)
+app.add_typer(wiki_app, name="wiki")
 
 
 def _select_wells(root: Path, well: str | None, all_wells: bool) -> dict[str, wells_mod.Well]:
@@ -262,6 +264,25 @@ def taxa_decide(
     decisions.set(target, variant, decision)
     decisions.save()
     typer.echo(f"Recorded: {variant!r} is {decision} as {target!r} -> {cfg.decisions_path()}")
+
+
+@wiki_app.command("ingest")
+def wiki_ingest(
+    in_dir: Path = typer.Option(Path("out"), "--in", help="Directory of per-well CSVs (from stratabugs)."),
+    wiki_dir: Path = typer.Option(Path("wiki"), "--wiki", help="Wiki directory to update."),
+) -> None:
+    """Ingest every per-well CSV in a directory into the wiki (entity pages + index + log)."""
+    from .wiki.ingest import ingest_well_csv
+
+    csvs = sorted(in_dir.glob("*.csv"))
+    if not csvs:
+        typer.echo(f"No CSVs found in {in_dir}. Run `diskos stratabugs` first.", err=True)
+        raise typer.Exit(code=1)
+
+    for csv_path in csvs:
+        page = ingest_well_csv(csv_path, wiki_dir)
+        typer.echo(f"  {csv_path.name} -> {page}")
+    typer.echo(f"\nIngested {len(csvs)} well(s) into {wiki_dir}")
 
 
 if __name__ == "__main__":
