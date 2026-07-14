@@ -43,6 +43,17 @@ def test_unknown_well_404(client):
     assert client.get("/api/wells/99_99-9").status_code == 404
 
 
+def test_ask_endpoint_uses_model(client, monkeypatch):
+    class FakeClient:
+        def ask(self, prompt, **kwargs):
+            return "The Jurassic sequence is dated by dinoflagellate cysts."
+
+    monkeypatch.setattr("diskos.web.assistant.make_client", lambda: FakeClient())
+    resp = client.post("/api/wells/35_9-1/ask", json={"question": "Summarize the biostrat"})
+    assert resp.status_code == 200
+    assert "Jurassic" in resp.json()["answer"]
+
+
 def test_logs_endpoint_returns_gamma_track(client):
     resp = client.get("/api/wells/7_11-1/logs")
     assert resp.status_code == 200

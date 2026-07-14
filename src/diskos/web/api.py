@@ -21,10 +21,16 @@ from starlette.middleware.sessions import SessionMiddleware
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+from pydantic import BaseModel
+
 from .. import wells as wells_mod
 from ..config import load_config
 from ..paths import diskos_root
 from .auth import current_user, dev_mode
+
+
+class AskBody(BaseModel):
+    question: str
 
 
 def _downsample(index, values, max_points: int = 1500):
@@ -111,6 +117,17 @@ def create_app() -> FastAPI:
     @app.get("/api/wells/{well_id}/logs")
     def well_logs(well_id: str, mnemonic: str = None, user: str = Depends(current_user)) -> dict:
         return {"well_id": well_id, "files": _well_logs(well_id, mnemonic)}
+
+    @app.post("/api/wells/{well_id}/ask")
+    def well_ask(well_id: str, body: AskBody, user: str = Depends(current_user)) -> dict:
+        from . import assistant
+
+        well = _well_or_404(well_id)
+        try:
+            result = assistant.answer_question(well, body.question)
+        except Exception as exc:  # model/endpoint unreachable
+            raise HTTPException(status_code=503, detail=f"Assistant unavailable: {exc}")
+        return {"well_id": well_id, "question": body.question, **result}
 
     # Static assets (styles, script). Mounted last so it never shadows /api routes.
     if STATIC_DIR.is_dir():

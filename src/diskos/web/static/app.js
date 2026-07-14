@@ -105,6 +105,7 @@ function renderWell(detail) {
 
   const id = detail.well_id;
   const tabs = [];
+  tabs.push({ label: "Assistant", render: (c) => renderAssistantPanel(c, detail) });
   if (detail.counts.logs) tabs.push({ label: "Well logs", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/logs`), render: renderLogsPanel });
   tabs.push({ label: "Files", render: (c) => renderFilesPanel(c, detail) });
   buildTabs(panel, tabs);
@@ -141,6 +142,85 @@ function buildTabs(panel, defs) {
   });
   panel.appendChild(bar);
   panels.forEach((p) => panel.appendChild(p));
+}
+
+const SUGGESTIONS = [
+  "Summarize the biostratigraphy of this well.",
+  "What ages or biozones are identified, and at what depths?",
+  "What are the key palynology events (first/last occurrences)?",
+];
+
+function renderAssistantPanel(container, detail) {
+  const id = detail.well_id;
+  const hasReports = (detail.counts.geology || 0) > 0;
+
+  const intro = document.createElement("p");
+  intro.className = "assistant-intro";
+  intro.textContent = hasReports
+    ? "Ask about this well. Answers come from the local model, grounded in this well's geology and biostratigraphy reports."
+    : "This well has no geology/biostratigraphy reports, so answers will be limited to its file catalogue.";
+  container.appendChild(intro);
+
+  const chips = document.createElement("div");
+  chips.className = "chips";
+  for (const s of SUGGESTIONS) {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.textContent = s;
+    chip.addEventListener("click", () => { box.value = s; run(); });
+    chips.appendChild(chip);
+  }
+  container.appendChild(chips);
+
+  const box = document.createElement("textarea");
+  box.className = "ask-box field";
+  box.rows = 3;
+  box.placeholder = "Ask a question about " + id + "...";
+  container.appendChild(box);
+
+  const bar = document.createElement("div");
+  bar.className = "ask-bar";
+  const btn = document.createElement("button");
+  btn.className = "btn";
+  btn.textContent = "Ask";
+  bar.appendChild(btn);
+  container.appendChild(bar);
+
+  const out = document.createElement("div");
+  out.className = "answer";
+  container.appendChild(out);
+
+  const run = async () => {
+    const q = box.value.trim();
+    if (!q) return;
+    out.className = "answer";
+    out.replaceChildren(msg("Thinking… (the local model can take a moment)"));
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/wells/${encodeURIComponent(id)}/ask`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
+      const data = await res.json();
+      out.replaceChildren();
+      const ans = document.createElement("div");
+      ans.className = "answer-text";
+      ans.textContent = data.answer;
+      out.appendChild(ans);
+      if (data.sources && data.sources.length) {
+        const src = document.createElement("p");
+        src.className = "answer-sources";
+        src.textContent = "Sources: " + data.sources.join(", ");
+        out.appendChild(src);
+      }
+    } catch (e) {
+      out.replaceChildren(errorMsg("Assistant unavailable: " + e.message));
+    } finally {
+      btn.disabled = false;
+    }
+  };
+  btn.addEventListener("click", run);
+  box.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run(); });
 }
 
 function renderFilesPanel(container, detail) {
