@@ -198,9 +198,9 @@ function buildChartCard(records, series) {
 
   // grid + axes
   const grid = el("g", { class: "grid" });
-  const yTicks = ticks(dmin, dmax, 6);
+  const yTicks = niceTicks(dmin, dmax, 6);
   for (const d of yTicks) grid.appendChild(el("line", { x1: m.l, x2: m.l + plotW, y1: yOf(d), y2: yOf(d) }));
-  const xTicks = ticks(0, xmax, 4);
+  const xTicks = niceTicks(0, xmax, 4);
   for (const v of xTicks) grid.appendChild(el("line", { x1: xOf(v), x2: xOf(v), y1: m.t, y2: m.t + plotH }));
   svg.appendChild(grid);
 
@@ -236,14 +236,19 @@ function buildChartCard(records, series) {
     svg.appendChild(g);
   }
 
-  // direct labels for the top <=4 series, at their shallowest sample
+  // direct labels for the top <=4 series, placed at each series' PEAK (max count)
+  // so they spread down the chart instead of colliding at the shallowest depth.
   series.slice(0, 4).forEach((s) => {
-    const p = records
+    const peak = records
       .map((r) => ({ d: Number(r.depth), v: Number(r[s.col]) }))
       .filter((q) => Number.isFinite(q.d) && Number.isFinite(q.v))
-      .sort((a, b) => a.d - b.d)[0];
-    if (!p) return;
-    const lbl = text(Math.min(xOf(p.v) + 8, m.l + plotW + 4), yOf(p.d) + 3, s.name, { class: "serie-label", fill: s.color });
+      .reduce((best, q) => (best && best.v >= q.v ? best : q), null);
+    if (!peak) return;
+    const lx = Math.min(xOf(peak.v) + 8, m.l + plotW - 4);
+    const anchor = lx > m.l + plotW - 90 ? "end" : "start";
+    const lbl = text(anchor === "end" ? xOf(peak.v) - 8 : lx, yOf(peak.d) - 6, s.name, {
+      class: "serie-label", fill: s.color, "text-anchor": anchor,
+    });
     svg.appendChild(lbl);
   });
 
@@ -338,10 +343,17 @@ function text(x, y, str, attrs = {}) {
   t.textContent = str;
   return t;
 }
-function ticks(min, max, n) {
+function niceTicks(min, max, count) {
   if (max === min) return [min];
-  const step = (max - min) / n;
-  return Array.from({ length: n + 1 }, (_, i) => min + i * step);
+  const raw = (max - min) / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const m = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+  const step = m * mag;
+  const start = Math.ceil(min / step) * step;
+  const out = [];
+  for (let v = start; v <= max + 1e-9; v += step) out.push(Math.round(v * 1e6) / 1e6);
+  return out;
 }
 function nearest(sorted, v) {
   let best = sorted[0], bd = Infinity;

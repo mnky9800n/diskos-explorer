@@ -53,6 +53,8 @@
 }
 
 * { box-sizing: border-box; }
+/* The hidden attribute must win over the display rules on .gate/.app/.well. */
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0;
