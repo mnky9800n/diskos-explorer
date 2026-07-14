@@ -18,9 +18,17 @@ uv run diskos stratabugs --well 7_11-1 --out out/ # one well
 uv run diskos taxa suggest --all         # suggest target species from the data
 uv run diskos taxa review                # similar names awaiting a same/different call
 uv run diskos taxa decide "<target>" "<variant>" same   # record a decision
+uv run diskos plot --in out/ --out out/palyno.png       # species-vs-depth figure
+uv run diskos logs --well 7_11-1 --out out/logs.png     # gamma/log tracks (LAS)
+uv run diskos wiki ingest --in out/ --wiki wiki/         # per-well CSV -> wiki pages
+DISKOS_WEB_DEV=1 uv run diskos serve     # web API (needs `web` extra)
 # Point at a sample tree without editing config:
 DISKOS_ROOT=./tests/data/diskos_sample uv run diskos stratabugs --all --out out/
 ```
+
+Optional dependency groups (kept out of the core install): `plot`, `welllog`,
+`llm`, `web`, `xrf`. matplotlib/openpyxl/lasio and the web+test deps are in the
+dev group so `uv run pytest` is self-contained.
 
 ## Architecture
 

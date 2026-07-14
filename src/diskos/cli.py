@@ -266,6 +266,17 @@ def taxa_decide(
     typer.echo(f"Recorded: {variant!r} is {decision} as {target!r} -> {cfg.decisions_path()}")
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8000, "--port"),
+) -> None:
+    """Run the web API (reuses the pipeline modules). Requires the `web` extra."""
+    import uvicorn
+
+    uvicorn.run("diskos.web.api:app", host=host, port=port, reload=False)
+
+
 @wiki_app.command("ingest")
 def wiki_ingest(
     in_dir: Path = typer.Option(Path("out"), "--in", help="Directory of per-well CSVs (from stratabugs)."),

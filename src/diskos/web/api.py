@@ -1,0 +1,169 @@
+"""FastAPI backend for the diskosAI web front end (scaffold).
+
+Reuses the pipeline modules directly (io/palyno/wells), so the app is a thin API
+over the same code the CLI uses. Every data endpoint is gated by the Google-OAuth
++ allowlist dependency in ``auth.py`` (dev-mode bypass for local work and tests).
+
+Run with `diskos serve` (or uvicorn). The React/HTML front end is a later step;
+this exposes the JSON the UI will consume.
+"""
+
+from __future__ import annotations
+
+import os
+
+import numpy as np
+import pandas as pd
+from fastapi import Depends, FastAPI, HTTPException
+from starlette.middleware.sessions import SessionMiddleware
+
+from .. import wells as wells_mod
+from ..config import load_config
+from ..io.stratabugs import parse_stratabugs_simple
+from ..palyno import reconcile
+from ..palyno.aggregate import create_wide_format
+from ..palyno.targets import TARGETS
+from ..paths import diskos_root
+from .auth import current_user, dev_mode
+
+
+def _records(wide: pd.DataFrame) -> list[dict]:
+    """Wide depth-indexed frame -> JSON-safe list of row dicts (NaN -> null)."""
+    frame = wide.reset_index()
+    frame = frame.astype(object).where(pd.notna(frame), None)
+    return frame.to_dict(orient="records")
+
+
+def _well_palynology(well_id: str) -> list[dict]:
+    cfg = load_config()
+    root = diskos_root(cfg)
+    catalog = wells_mod.catalog(root)
+    if well_id not in catalog:
+        raise HTTPException(status_code=404, detail=f"Well {well_id} not found.")
+    decisions = reconcile.Decisions.load(cfg.decisions_path())
+
+    files = []
+    for asc in catalog[well_id].paly:
+        obs = parse_stratabugs_simple(asc)["observations"]
+        if obs.empty:
+            continue
+        available = sorted(obs["taxon_name"].dropna().unique().tolist())
+        result = reconcile.resolve_matches(TARGETS, available, decisions)
+        wide = create_wide_format(obs, result.mapping)
+        files.append(
+            {
+                "file": asc.name,
+                "columns": list(wide.columns),
+                "records": _records(wide),
+                "pending_decisions": [
+                    {"target": p.target, "variant": p.variant, "similarity": p.similarity}
+                    for p in result.pending
+                ],
+            }
+        )
+    return files
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="diskosAI", version="0.1.0")
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=os.environ.get("DISKOS_SESSION_SECRET", "dev-insecure-secret"),
+    )
+    _register_oauth(app)
+
+    @app.get("/health")
+    def health() -> dict:
+        return {"status": "ok", "dev_mode": dev_mode()}
+
+    @app.get("/api/wells")
+    def list_wells(user: str = Depends(current_user)) -> list[dict]:
+        root = diskos_root(load_config())
+        catalog = wells_mod.catalog(root)
+        return [
+            {
+                "well_id": wid,
+                "paly": len(w.paly),
+                "logs": len(w.logs),
+                "xrf": len(w.xrf),
+            }
+            for wid, w in sorted(catalog.items())
+        ]
+
+    @app.get("/api/wells/{well_id}")
+    def well_detail(well_id: str, user: str = Depends(current_user)) -> dict:
+        root = diskos_root(load_config())
+        catalog = wells_mod.catalog(root)
+        if well_id not in catalog:
+            raise HTTPException(status_code=404, detail=f"Well {well_id} not found.")
+        w = catalog[well_id]
+        return {
+            "well_id": well_id,
+            "paly": [p.name for p in w.paly],
+            "logs": [p.name for p in w.logs],
+            "xrf": [p.name for p in w.xrf],
+        }
+
+    @app.get("/api/wells/{well_id}/palynology")
+    def well_palynology(well_id: str, user: str = Depends(current_user)) -> dict:
+        return {"well_id": well_id, "files": _well_palynology(well_id)}
+
+    return app
+
+
+def _register_oauth(app: FastAPI) -> None:
+    """Register Google OIDC routes if credentials are present, else stub /auth/login.
+
+    Real login needs GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET. Without them the app
+    still runs (use dev mode); login just reports that OAuth is not configured.
+    """
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+
+    if not (client_id and client_secret):
+        @app.get("/auth/login")
+        def login_unconfigured() -> dict:
+            return {
+                "detail": "Google OAuth not configured. Set GOOGLE_CLIENT_ID / "
+                "GOOGLE_CLIENT_SECRET, or run with DISKOS_WEB_DEV=1."
+            }
+        return
+
+    from authlib.integrations.starlette_client import OAuth
+    from fastapi import Request
+    from fastapi.responses import RedirectResponse
+
+    oauth = OAuth()
+    oauth.register(
+        name="google",
+        client_id=client_id,
+        client_secret=client_secret,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
+
+    @app.get("/auth/login")
+    async def login(request: Request):
+        redirect_uri = request.url_for("auth_callback")
+        return await oauth.google.authorize_redirect(request, redirect_uri)
+
+    @app.get("/auth/callback", name="auth_callback")
+    async def auth_callback(request: Request):
+        from .auth import is_allowed
+
+        token = await oauth.google.authorize_access_token(request)
+        userinfo = token.get("userinfo") or {}
+        email = userinfo.get("email")
+        if not is_allowed(email):
+            raise HTTPException(status_code=403, detail=f"{email} is not allowlisted.")
+        request.session["user"] = email
+        return RedirectResponse(url="/")
+
+    @app.get("/auth/logout")
+    async def logout(request: Request):
+        request.session.pop("user", None)
+        return RedirectResponse(url="/")
+
+
+# Module-level app for `uvicorn diskos.web.api:app`.
+app = create_app()
