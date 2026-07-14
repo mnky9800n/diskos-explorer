@@ -1,0 +1,9 @@
+Instrument,Niton XL3T
+Date,2020-01-01
+Operator,jw
+Notes,cuttings XRF
+SampleID,0.0,0.015,0.030,0.045,0.060
+1350m (Main Range),10,20,150,30,5
+1350m (Low Range),8,15,120,25,4
+1400m (Main Range),12,22,140,28,6
+1400m (Low Range),9,18,130,24,5
