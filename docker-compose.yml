@@ -1,0 +1,18 @@
+# diskosAI on homebase. One service among your others; binds only to localhost so
+# your existing reverse proxy routes a subdomain (e.g. diskos.johnspace.xyz) to it.
+services:
+  diskos-web:
+    build: .
+    image: diskos-web:latest
+    container_name: diskos-web
+    restart: unless-stopped
+    # Secrets (allowlist, OAuth, session key) live on homebase, out of git.
+    env_file: /srv/diskos/diskos.env
+    environment:
+      # The DISKOS data, mounted read-only from lambda-scalar over tailscale sshfs.
+      DISKOS_ROOT: /data
+    volumes:
+      - /srv/diskos/data:/data:ro
+    ports:
+      # host:container. Only reachable from homebase itself; proxy in front.
+      - "127.0.0.1:8087:8000"

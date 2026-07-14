@@ -1,0 +1,30 @@
+# systemd mount unit: DISKOS data from lambda-scalar over tailscale via sshfs.
+# Install to /etc/systemd/system/srv-diskos-data.mount (filename MUST match the
+# mount point path: /srv/diskos/data -> srv-diskos-data.mount).
+#
+#   sudo apt install sshfs
+#   sudo mkdir -p /srv/diskos/data
+#   # allow the container (root) to read a FUSE mount owned by another user:
+#   echo user_allow_other | sudo tee -a /etc/fuse.conf
+#   # key that can log in to lambda-scalar (tailnet hostname assumed via MagicDNS):
+#   #   sudo ssh-keygen -f /root/.ssh/id_diskos -N ''
+#   #   ssh-copy-id -i /root/.ssh/id_diskos mnky9800n@lambda-scalar
+#   sudo cp deploy/srv-diskos-data.mount /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now srv-diskos-data.mount
+#
+# Edit What= to your actual user@tailnet-host:path.
+[Unit]
+Description=DISKOS data (lambda-scalar) over tailscale sshfs
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Mount]
+What=mnky9800n@lambda-scalar:/home/mnky9800n/data/DISKOS
+Where=/srv/diskos/data
+Type=fuse.sshfs
+Options=ro,_netdev,allow_other,reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,IdentityFile=/root/.ssh/id_diskos,StrictHostKeyChecking=accept-new
+TimeoutSec=40
+
+[Install]
+WantedBy=multi-user.target
