@@ -22,7 +22,9 @@ xrf = ["PyMca5>=5.9"]                           # Phase 7: XRF (heavy, kept isol
 diskos = "diskos.cli:app"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+# matplotlib/openpyxl are also in the `plot` extra; included here so `uv run
+# pytest` exercises the plotting module out of the box.
+dev = ["pytest>=8.0", "matplotlib>=3.7", "openpyxl>=3.1"]
 
 [build-system]
 requires = ["hatchling"]

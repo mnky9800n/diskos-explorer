@@ -126,6 +126,29 @@ def stratabugs(
         )
 
 
+@app.command()
+def plot(
+    in_dir: Path = typer.Option(Path("out"), "--in", help="Directory of per-well CSVs (from stratabugs)."),
+    out_path: Path = typer.Option(Path("out/palyno.png"), "--out", help="Output figure path."),
+    tops: Path = typer.Option(None, "--tops", help="Optional formation-tops .xlsx for shading."),
+) -> None:
+    """Plot species-vs-depth for every per-well CSV in a directory (one figure)."""
+    import pandas as pd
+
+    from .palyno import plot as palyno_plot
+
+    csvs = sorted(in_dir.glob("*.csv"))
+    if not csvs:
+        typer.echo(f"No CSVs found in {in_dir}. Run `diskos stratabugs` first.", err=True)
+        raise typer.Exit(code=1)
+
+    frames = {p.name: pd.read_csv(p) for p in csvs}
+    tops_df = palyno_plot.load_formation_tops(tops) if tops else None
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    palyno_plot.plot_wells(frames, tops=tops_df, out_path=out_path)
+    typer.echo(f"Wrote {out_path} ({len(frames)} well(s))")
+
+
 @taxa_app.command("suggest")
 def taxa_suggest(
     well: str = typer.Option(None, "--well", help="Suggest from one borehole."),

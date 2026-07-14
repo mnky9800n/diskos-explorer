@@ -257,6 +257,8 @@ xrf = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "matplotlib" },
+    { name = "openpyxl" },
     { name = "pytest" },
 ]
 
@@ -275,7 +277,11 @@ requires-dist = [
 provides-extras = ["plot", "welllog", "llm", "xrf"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.0" }]
+dev = [
+    { name = "matplotlib", specifier = ">=3.7" },
+    { name = "openpyxl", specifier = ">=3.1" },
+    { name = "pytest", specifier = ">=8.0" },
+]
 
 [[package]]
 name = "distro"
