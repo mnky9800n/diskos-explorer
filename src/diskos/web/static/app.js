@@ -50,6 +50,111 @@ async function loadWells() {
   renderRail("");
   setStatus("Ready", `${WELLS.length} wells`);
   $("#filter").addEventListener("input", (e) => renderRail(e.target.value.trim().toLowerCase()));
+  $("#corpusbtn").addEventListener("click", showCorpus);
+}
+
+async function showCorpus() {
+  ACTIVE = null;
+  renderRail($("#filter").value.trim().toLowerCase());
+  $("#empty").hidden = true;
+  const panel = $("#well");
+  panel.hidden = false;
+  panel.scrollTop = 0;
+  panel.replaceChildren(loadingMsg());
+  try {
+    renderCorpusPanel(panel, await fetchJSON("/api/corpus"));
+  } catch (e) {
+    panel.replaceChildren(errorMsg("Could not load the corpus overview."));
+  }
+}
+
+function renderCorpusPanel(container, stats) {
+  container.replaceChildren();
+  setStatus("Corpus overview", `${stats.n_wells} wells`);
+
+  const head = document.createElement("div");
+  head.className = "well-head";
+  head.innerHTML = `<h2>DISKOS corpus</h2><span class="well-sub">${stats.n_wells} wells</span>`;
+  container.appendChild(head);
+
+  container.appendChild(sectionLabel("Data coverage (wells with each type)"));
+  const tiles = document.createElement("div");
+  tiles.className = "tiles";
+  const cov = { ...stats.coverage, biostrat: stats.biostrat, core: stats.core };
+  for (const [t, n] of Object.entries(cov)) {
+    if (!n) continue;
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    tile.innerHTML = `<div class="tile-n">${n}</div><div class="tile-t">${TYPE_LABEL[t] || t}</div><div class="tile-pct">${Math.round((n / stats.n_wells) * 100)}%</div>`;
+    tiles.appendChild(tile);
+  }
+  container.appendChild(tiles);
+
+  // Finder
+  container.appendChild(sectionLabel("Find wells"));
+  const finder = document.createElement("div");
+  finder.className = "finder";
+  const typeSel = document.createElement("select");
+  typeSel.className = "field";
+  typeSel.innerHTML = `<option value="">any type</option>` + Object.keys(stats.coverage).map((t) => `<option value="${t}">${TYPE_LABEL[t] || t}</option>`).join("");
+  const quad = document.createElement("input");
+  quad.className = "field finder-q";
+  quad.placeholder = "quadrant (e.g. 35)";
+  const bioLbl = document.createElement("label"); const bio = document.createElement("input"); bio.type = "checkbox"; bioLbl.append(bio, document.createTextNode(" biostrat"));
+  const coreLbl = document.createElement("label"); const core = document.createElement("input"); core.type = "checkbox"; coreLbl.append(core, document.createTextNode(" core"));
+  const findBtn = document.createElement("button"); findBtn.className = "btn"; findBtn.textContent = "Find";
+  finder.append(typeSel, quad, bioLbl, coreLbl, findBtn);
+  container.appendChild(finder);
+  const results = document.createElement("div"); results.className = "finder-results"; container.appendChild(results);
+
+  const doFind = async () => {
+    const params = new URLSearchParams();
+    if (typeSel.value) params.set("type", typeSel.value);
+    if (quad.value.trim()) params.set("quadrant", quad.value.trim());
+    if (bio.checked) params.set("biostrat", "true");
+    if (core.checked) params.set("core", "true");
+    results.replaceChildren(loadingMsg());
+    try {
+      const d = await fetchJSON("/api/corpus/find?" + params.toString());
+      results.replaceChildren(sectionLabel(`${d.count} well${d.count === 1 ? "" : "s"}`));
+      const ul = document.createElement("ul"); ul.className = "filelist";
+      for (const w of d.wells) {
+        const li = document.createElement("li");
+        const a = document.createElement("a"); a.className = "filelink"; a.href = "#"; a.textContent = w.well_id;
+        a.addEventListener("click", (e) => { e.preventDefault(); selectWell(w.well_id); });
+        const meta = document.createElement("span"); meta.className = "finder-meta";
+        meta.textContent = w.types.join(", ") + (w.biostrat ? " · biostrat" : "") + (w.core ? " · core" : "");
+        li.append(a, meta);
+        ul.appendChild(li);
+      }
+      results.appendChild(ul);
+    } catch (e) { results.replaceChildren(errorMsg("Find failed.")); }
+  };
+  findBtn.addEventListener("click", doFind);
+
+  // Cross-well ask
+  container.appendChild(sectionLabel("Ask across the corpus"));
+  const box = document.createElement("textarea");
+  box.className = "ask-box field"; box.rows = 2;
+  box.placeholder = "e.g. how much of the archive has biostratigraphy reports?";
+  container.appendChild(box);
+  const abar = document.createElement("div"); abar.className = "ask-bar";
+  const abtn = document.createElement("button"); abtn.className = "btn"; abtn.textContent = "Ask";
+  abar.appendChild(abtn); container.appendChild(abar);
+  const aout = document.createElement("div"); aout.className = "answer"; container.appendChild(aout);
+  const ask = async () => {
+    const q = box.value.trim(); if (!q) return;
+    aout.replaceChildren(msg("Thinking…")); abtn.disabled = true;
+    try {
+      const res = await fetch("/api/corpus/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
+      const d = await res.json();
+      const t = document.createElement("div"); t.className = "answer-text"; t.textContent = d.answer;
+      aout.replaceChildren(t);
+    } catch (e) { aout.replaceChildren(errorMsg("Assistant unavailable: " + e.message)); }
+    finally { abtn.disabled = false; }
+  };
+  abtn.addEventListener("click", ask);
 }
 
 function renderRail(filter) {
