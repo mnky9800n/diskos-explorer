@@ -144,26 +144,29 @@ function buildTabs(panel, defs) {
   panels.forEach((p) => panel.appendChild(p));
 }
 
-const SUGGESTIONS = [
-  "Summarize the biostratigraphy of this well.",
-  "What ages or biozones are identified, and at what depths?",
-  "What are the key palynology events (first/last occurrences)?",
-];
+function suggestionsFor(counts) {
+  const s = [];
+  if (counts.geology) s.push("Summarize the biostratigraphy of this well.", "What ages or biozones are identified, and at what depths?");
+  if (counts.logs) s.push("Describe the gamma log character with depth.", "What log curves are available and over what depth range?");
+  if (counts.seismic) s.push("What seismic or checkshot data does this well have?");
+  s.push("What data does this well have?");
+  return s.slice(0, 4);
+}
 
 function renderAssistantPanel(container, detail) {
   const id = detail.well_id;
-  const hasReports = (detail.counts.geology || 0) > 0;
+  const counts = detail.counts || {};
 
   const intro = document.createElement("p");
   intro.className = "assistant-intro";
-  intro.textContent = hasReports
-    ? "Ask about this well. Answers come from the local model, grounded in this well's geology and biostratigraphy reports."
-    : "This well has no geology/biostratigraphy reports, so answers will be limited to its file catalogue.";
+  intro.textContent =
+    "Ask about this well. The local model answers from this well's own context: "
+    + "its file inventory, log curves, and (where present) geology/biostratigraphy reports.";
   container.appendChild(intro);
 
   const chips = document.createElement("div");
   chips.className = "chips";
-  for (const s of SUGGESTIONS) {
+  for (const s of suggestionsFor(counts)) {
     const chip = document.createElement("button");
     chip.className = "chip";
     chip.textContent = s;

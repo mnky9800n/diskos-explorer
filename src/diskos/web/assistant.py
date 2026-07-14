@@ -76,27 +76,52 @@ def format_inventory(well) -> str:
     return "\n".join(lines) or "(no catalogued files)"
 
 
-def build_prompt(well_id: str, inventory: str, report_text: str, question: str) -> str:
+def summarize_logs(well, max_files: int = 2) -> str:
+    """Summarize the well's LAS logs: curves present, depth range, gamma stats."""
+    from ..welllog import curves as wl
+
+    parts = []
+    for las in well.files.get("logs", [])[:max_files]:
+        try:
+            df = wl.read_las(las)
+        except Exception:
+            continue
+        mnems = wl.available_mnemonics(df)
+        depth = df.index.to_numpy(dtype=float)
+        line = f"{las.name}: curves [{', '.join(mnems[:24])}]; depth {depth.min():.0f}-{depth.max():.0f} m"
+        try:
+            g = wl.gamma_column(df)
+            s = df[g].dropna()
+            line += f"; gamma {g} min {s.min():.0f} / mean {s.mean():.0f} / max {s.max():.0f} API"
+        except Exception:
+            pass
+        parts.append(line)
+    return "\n".join(parts) or "(no readable logs)"
+
+
+def build_prompt(well_id: str, inventory: str, log_summary: str, report_text: str, question: str) -> str:
     reports = report_text or "(no geology/biostratigraphy report text is available for this well)"
     return (
         f"You are assisting a geologist with Norwegian DISKOS well {well_id}. "
-        f"Two kinds of context follow.\n\n"
+        f"Several kinds of context follow.\n\n"
         f"DATA INVENTORY (the files this well has):\n{inventory}\n\n"
+        f"LOG SUMMARY (well-log curves and gamma statistics):\n{log_summary}\n\n"
         f"REPORT EXCERPTS (geology / biostratigraphy text, if any):\n{reports}\n\n"
-        f"Answer the question. Use the DATA INVENTORY to describe what data or files "
-        f"the well holds. Use the REPORT EXCERPTS for geological interpretation (ages, "
-        f"zones, species, depths), citing the report file name. If the excerpts do not "
-        f"cover something asked, say the reports do not include it. Do not invent "
-        f"findings. Be concise.\n\n"
+        f"Answer the question using whichever context is relevant. Describe the well's "
+        f"data and logs from the inventory and log summary; use the report excerpts for "
+        f"geological interpretation (ages, zones, species, depths), citing the report "
+        f"file name. If the context does not cover something asked, say so. Do not invent "
+        f"findings or numbers. Be concise.\n\n"
         f"QUESTION: {question}"
     )
 
 
 def answer_question(well, question: str, client: LLMClient | None = None) -> dict:
-    """Answer a question about a well, grounded in its inventory + report PDFs."""
+    """Answer a question about a well, grounded in its inventory, logs, and reports."""
     client = client or make_client()
     report_paths = well.files.get("geology", [])
     report_text, used = extract_report_text(report_paths)
-    prompt = build_prompt(well.well_id, format_inventory(well), report_text, question)
+    log_summary = summarize_logs(well) if well.files.get("logs") else "(no logs)"
+    prompt = build_prompt(well.well_id, format_inventory(well), log_summary, report_text, question)
     reply = client.ask(prompt, max_tokens=600, temperature=0.2)
     return {"answer": reply, "sources": used, "reports_available": [p.name for p in report_paths]}
