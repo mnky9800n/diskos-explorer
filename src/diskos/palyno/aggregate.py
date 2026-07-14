@@ -1,13 +1,13 @@
 """Build the wide per-well palynology table (depth x target taxon).
 
-Ported from Jack's ``StrataBugs_Read_Mod.ipynb`` with the key data-loss bug fixed.
+Takes an already-decided ``taxa_mapping`` (target -> accepted variant names) from
+``reconcile.resolve_matches``, so name reconciliation (including any human
+same/different calls) happens upstream and this module only aggregates.
 
-The original collapsed matched variants at a shared depth with
-``groupby('depth').first()``, which silently dropped every variant but one, even
-for counts. Aggregation across name variants is the whole point of the matching
-step, so counts are now SUMMED per depth.
+The count data-loss bug from the notebook is fixed here: matched variants at a
+shared depth are SUMMED, not collapsed with ``groupby('depth').first()``.
 
-Per-column aggregation semantics (the count rule is unambiguous; the others are
+Per-column aggregation semantics (count is unambiguous; the others are
 provisional and flagged for Jack, see the plan's open decisions):
   _cnt   : sum of counts across matched variants at that depth.
   _abn   : highest-ranked abundance code present (R < O < C < A < SA).
@@ -18,8 +18,6 @@ provisional and flagged for Jack, see the plan's open decisions):
 from __future__ import annotations
 
 import pandas as pd
-
-from .taxa import find_all_matches_for_targets
 
 # Abundance codes ordered from least to most abundant. Used to pick the
 # strongest code when several variants coincide at one depth.
@@ -44,24 +42,22 @@ def _any_flag(subset: pd.DataFrame, column: str, flag: str, index: pd.Index) -> 
     return present.map(lambda x: flag if x else pd.NA)
 
 
-def create_wide_format_with_target_matching(
+def create_wide_format(
     obs_data: pd.DataFrame,
-    target_taxa_list: list[str],
-    similarity_threshold: float = 0.85,
+    taxa_mapping: dict[str, list[str]],
 ) -> pd.DataFrame:
     """Return a wide DataFrame indexed by depth, one group of columns per target.
 
+    Args:
+        obs_data: tidy observations from ``parse_stratabugs_simple``.
+        taxa_mapping: target -> list of variant names accepted as that target
+            (from ``reconcile.resolve_matches().mapping``).
+
     Columns are ``<Target_Name>_cnt`` (and ``_abn`` / ``_p-out`` / ``_unct`` where
-    data exists). Targets with no matches contribute no columns, so the column set
-    varies from well to well.
+    data exists). Targets with no accepted variants contribute no columns.
     """
     if obs_data.empty:
         return pd.DataFrame()
-
-    all_taxa = obs_data["taxon_name"].dropna().unique().tolist()
-    taxa_mapping = find_all_matches_for_targets(
-        all_taxa, target_taxa_list, similarity_threshold
-    )
 
     depths = sorted(obs_data["depth"].dropna().unique())
     wide = pd.DataFrame(index=pd.Index(depths, name="depth"))
@@ -71,16 +67,15 @@ def create_wide_format_with_target_matching(
     have_present = "present_outside_sample" in obs_data.columns
     have_uncert = "uncertainty" in obs_data.columns
 
-    for target_taxon in target_taxa_list:
-        matches = taxa_mapping.get(target_taxon, [])
-        if not matches:
+    for target, variants in taxa_mapping.items():
+        if not variants:
             continue
 
-        subset = obs_data[obs_data["taxon_name"].isin(matches)]
+        subset = obs_data[obs_data["taxon_name"].isin(variants)]
         if subset.empty:
             continue
 
-        canonical = target_taxon.replace(" ", "_")
+        canonical = target.replace(" ", "_")
 
         if have_count:
             wide[f"{canonical}_cnt"] = _sum_counts(subset, wide.index)
@@ -91,8 +86,6 @@ def create_wide_format_with_target_matching(
                 subset, "present_outside_sample", "+", wide.index
             )
         if have_uncert and subset["uncertainty"].eq("?").any():
-            wide[f"{canonical}_unct"] = _any_flag(
-                subset, "uncertainty", "?", wide.index
-            )
+            wide[f"{canonical}_unct"] = _any_flag(subset, "uncertainty", "?", wide.index)
 
     return wide

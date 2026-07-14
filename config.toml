@@ -10,6 +10,8 @@ diskos_root = "//lambda-scalar/home/mnky9800n/data/DISKOS"
 local_sample = "./data/DISKOS"
 # Which root to use: "diskos_root" (run on lambda-scalar) or "local_sample" (laptop).
 prefer = "diskos_root"
+# Persistent human same/different calls on similar taxon names (relative to repo root).
+taxon_decisions = "taxon_decisions.csv"
 
 [llm]
 # Cheap, always-on local model unless a caller explicitly asks for another profile.

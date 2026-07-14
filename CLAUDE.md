@@ -15,6 +15,9 @@ uv run pytest tests/test_stratabugs.py::test_aggregate_sums_counts_regression  #
 uv run diskos wells                      # print the discovered borehole catalog
 uv run diskos stratabugs --all --out out/         # palynology pipeline, all wells
 uv run diskos stratabugs --well 7_11-1 --out out/ # one well
+uv run diskos taxa suggest --all         # suggest target species from the data
+uv run diskos taxa review                # similar names awaiting a same/different call
+uv run diskos taxa decide "<target>" "<variant>" same   # record a decision
 # Point at a sample tree without editing config:
 DISKOS_ROOT=./tests/data/diskos_sample uv run diskos stratabugs --all --out out/
 ```
@@ -26,7 +29,9 @@ Layered, lower never imports upper: `io/` (raw parsers) → `palyno`/`welllog`/`
 - **`paths.py` is the only module that knows where DISKOS data lives** (resolves `DISKOS_ROOT` env, then `config.toml` `[paths].prefer`). Every parser takes an explicit path; no `os.chdir`, no hardcoded well paths (unlike the notebooks).
 - **`wells.py` is the generalization backbone.** It discovers boreholes by scanning the tree and deriving a well ID from each filename (layout-agnostic), so every stage is `--well <id>` or `--all` addressable. This is both the "reapply Jack's pipeline to any borehole" requirement and the feedstock for the wiki's cross-well context.
 
-The palynology pipeline (`io/stratabugs.py` parse → `palyno/taxa.py` fuzzy-match name variants onto `palyno/targets.py` canonical lists → `palyno/aggregate.py` wide depth×species CSV) is the model for later data types: parse raw → reconcile → emit clean, wiki-ingestible artifacts to `out/`, not just figures. Two bugs from the notebook are fixed here and guarded by regression tests: the parenthesis-stripping regex in `normalize_taxon_name_for_columns`, and count aggregation (now summed per depth, was `.first()`).
+The palynology pipeline (`io/stratabugs.py` parse → `palyno/reconcile.py` match names → `palyno/aggregate.py` wide depth×species CSV) is the model for later data types: parse raw → reconcile → emit clean, wiki-ingestible artifacts to `out/`, not just figures. Two bugs from the notebook are fixed here and guarded by regression tests: the parenthesis-stripping regex in `normalize_taxon_name_for_columns`, and count aggregation (now summed per depth, was `.first()`).
+
+Name reconciliation is human-in-the-loop by design (Jack's calls): an **exact** genus+species match auto-merges (author/year ignored), but a merely **similar** name (spelling near-miss) is held apart and never silently merged. It goes to a same/different decision persisted in `taxon_decisions.csv` (`reconcile.Decisions`, path from config) and reused everywhere. The `diskos taxa review`/`decide` commands drive this from the CLI now; the web app will drive the same decision store later. Target species are not a fixed list to hand-maintain: `palyno/suggest.py` ranks candidate targets by prevalence in the selected wells (`diskos taxa suggest`) so Jack picks from what is actually there (a richer LLM-based biostrat suggestion can come with the model layer). `palyno/targets.py` holds the current default picks; `palyno/taxa.py` keeps the lower-level `fuzzy_match_taxa` helper.
 
 Model/compute access is config-driven and swappable 3 ways (lambda-scalar Ollama for serving Jack, Modal for burst GPU, a cloud Claude model for wiki authoring) via profiles in `config.toml`; secrets stay in a gitignored `.env` referenced by env-var name. The web front end (Phase 5) will gate everything behind Google OAuth + an email allowlist.
 

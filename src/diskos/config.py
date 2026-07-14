@@ -38,6 +38,14 @@ class Config:
     default_profile: str
     profiles: dict[str, LLMProfile] = field(default_factory=dict)
     project_root: Path = Path(".")
+    taxon_decisions: str = "taxon_decisions.csv"
+
+    def decisions_path(self) -> Path:
+        """Absolute path to the persistent taxon same/different decisions file."""
+        path = Path(self.taxon_decisions)
+        if not path.is_absolute():
+            path = self.project_root / path
+        return path
 
     def profile(self, name: str | None = None) -> LLMProfile:
         """Return a model profile by name, defaulting to ``default_profile``."""
@@ -94,4 +102,5 @@ def load_config(path: Path | None = None) -> Config:
         default_profile=llm.get("default_profile", "jack-serve"),
         profiles=profiles,
         project_root=project_root,
+        taxon_decisions=paths.get("taxon_decisions", "taxon_decisions.csv"),
     )
