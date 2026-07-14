@@ -1,0 +1,17 @@
+# Environments
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets (never commit)
+.env
+secrets.toml
+
+# Local data samples and generated output (not tracked; see README rsync recipe).
+# Anchored to repo root so the committed tests/data fixture is NOT ignored.
+/data/
+/out/
+
+# OS / editor
+.DS_Store
+.ipynb_checkpoints/

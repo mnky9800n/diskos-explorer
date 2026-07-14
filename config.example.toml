@@ -1,0 +1,43 @@
+# diskosAI configuration. Committed to git: paths and model/compute PROFILES only.
+# Never put secrets here. API keys are referenced by environment-variable name
+# (api_key_env) and live in a gitignored .env (see .env.example).
+
+[paths]
+# Canonical data root on lambda-scalar (SSH-only, immutable). Used when running
+# on lambda-scalar directly.
+diskos_root = "//lambda-scalar/home/mnky9800n/data/DISKOS"
+# A small rsync'd subset for laptop dev (see README for the rsync recipe).
+local_sample = "./data/DISKOS"
+# Which root to use: "diskos_root" (run on lambda-scalar) or "local_sample" (laptop).
+prefer = "diskos_root"
+
+[llm]
+# Cheap, always-on local model unless a caller explicitly asks for another profile.
+default_profile = "jack-serve"
+
+# --- Model/compute profiles. All go through one OpenAI-compatible client. ---
+
+[llm.profiles.jack-serve]
+# lambda-scalar Ollama: always-on, unmetered, data stays local. Serves Jack.
+base_url = "http://lambda-scalar:11434/v1"
+model = "qwen2.5:14b"
+api_key_env = "OLLAMA_API_KEY"
+
+[llm.profiles.vision]
+# Microscope-image triage/captioning. NOT reliable for species ID.
+base_url = "http://lambda-scalar:11434/v1"
+model = "qwen2.5vl:7b"
+api_key_env = "OLLAMA_API_KEY"
+
+[llm.profiles.modal]
+# On-demand GPU for bursty heavy jobs (bulk vision, XRF batch). ~$500 credit.
+base_url = "https://REPLACE-modal-app.modal.run/v1"
+model = "REPLACE-hosted-model"
+api_key_env = "MODAL_API_KEY"
+
+[llm.profiles.wiki-author]
+# Stronger cloud model for high-quality wiki synthesis during build-out.
+# Enforce the no-em-dash house style via this profile's system prompt.
+base_url = "https://REPLACE-anthropic-openai-gateway/v1"
+model = "claude-sonnet-5"
+api_key_env = "WIKI_AUTHOR_API_KEY"
