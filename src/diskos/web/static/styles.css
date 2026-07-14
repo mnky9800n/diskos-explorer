@@ -183,6 +183,25 @@ body {
   background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 4px 8px;
 }
 
+/* tabs */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 8px 0 22px; }
+.tab {
+  appearance: none; background: none; border: none; cursor: pointer;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-3); padding: 9px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tabpanel[hidden] { display: none; }
+
+/* xrf selectors */
+.xrf-controls { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.xrf-controls label { font-family: var(--mono); font-size: 11px; color: var(--text-3); }
+.xrf-controls select {
+  font-family: var(--mono); font-size: 12px; padding: 5px 8px; border-radius: 5px;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text);
+}
+
 .section-label {
   font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
   color: var(--text-3); margin: 0 0 12px;

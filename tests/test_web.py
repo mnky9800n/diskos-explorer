@@ -46,6 +46,28 @@ def test_unknown_well_404(client):
     assert client.get("/api/wells/99_99-9").status_code == 404
 
 
+def test_logs_endpoint_returns_gamma_track(client):
+    resp = client.get("/api/wells/7_11-1/logs")
+    assert resp.status_code == 200
+    files = resp.json()["files"]
+    assert files and files[0]["gamma"] == "GR"
+    track = files[0]["tracks"][0]
+    assert track["mnemonic"] == "GR"
+    assert track["points"] and "depth" in track["points"][0] and "value" in track["points"][0]
+
+
+def test_xrf_endpoint_returns_spectrum(client):
+    resp = client.get("/api/wells/25_7-5/xrf")
+    assert resp.status_code == 200
+    files = resp.json()["files"]
+    assert files
+    assert files[0]["depths"] == [1350, 1400]
+    assert "Main Range" in files[0]["ranges"]
+    spec = files[0]["spectrum"]
+    assert spec["range"] == "Main Range"
+    assert len(spec["energy"]) == len(spec["counts"]) > 0
+
+
 def test_allowlist_blocks_non_listed_user(monkeypatch):
     # Dev mode on, but a non-empty allowlist that excludes the default dev user.
     monkeypatch.setenv("DISKOS_WEB_DEV", "1")
