@@ -54,7 +54,7 @@ Settings -> Actions -> Runners -> New self-hosted runner (Linux x64) on the repo
 then on homebase follow the shown steps. Give it the label `homebase`:
 
 ```bash
-./config.sh --url https://github.com/mnky9800n/diskosAI --token <TOKEN> --labels homebase
+./config.sh --url https://github.com/mnky9800n/diskos-explorer --token <TOKEN> --labels homebase
 sudo ./svc.sh install && sudo ./svc.sh start
 sudo usermod -aG docker $(whoami)       # runner user needs Docker; re-login after
 ```
