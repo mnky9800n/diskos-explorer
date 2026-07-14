@@ -17,11 +17,18 @@ class FakeClient:
         return "Canned answer grounded in the report."
 
 
-def test_build_prompt_includes_question_and_context():
-    p = assistant.build_prompt("35_9-1", {"logs": 1, "geology": 2}, "excerpt text here", "What ages?")
+def test_build_prompt_includes_inventory_and_context():
+    p = assistant.build_prompt("35_9-1", "- logs (1): a.LAS", "excerpt text here", "What ages?")
     assert "35_9-1" in p
     assert "What ages?" in p
     assert "excerpt text here" in p
+    assert "a.LAS" in p  # data inventory reaches the model
+
+
+def test_format_inventory_lists_types():
+    well = wells.well_files(SAMPLE_ROOT, "35_9-1")
+    inv = assistant.format_inventory(well)
+    assert "geology" in inv and "images" in inv
 
 
 def test_extract_report_text_notes_scans(tmp_path):

@@ -66,24 +66,37 @@ def extract_report_text(paths: list[Path], max_chars: int = MAX_REPORT_CHARS) ->
     return "\n\n".join(chunks), used
 
 
-def build_prompt(well_id: str, counts: dict, report_text: str, question: str) -> str:
-    data = ", ".join(f"{n} {t}" for t, n in counts.items()) or "no catalogued files"
-    context = report_text or "(no report text could be extracted for this well)"
+def format_inventory(well) -> str:
+    """A human-readable list of what data/files the well has, by type."""
+    lines = []
+    for data_type, paths in well.files.items():
+        shown = [p.name for p in paths[:6]]
+        more = f", +{len(paths) - 6} more" if len(paths) > 6 else ""
+        lines.append(f"- {data_type} ({len(paths)}): {', '.join(shown)}{more}")
+    return "\n".join(lines) or "(no catalogued files)"
+
+
+def build_prompt(well_id: str, inventory: str, report_text: str, question: str) -> str:
+    reports = report_text or "(no geology/biostratigraphy report text is available for this well)"
     return (
-        f"You are assisting a geologist with Norwegian DISKOS well {well_id}.\n"
-        f"Data available for this well: {data}.\n"
-        f"Answer using ONLY the report excerpts below. If they do not contain the "
-        f"answer, say so plainly. Cite the report file name when you use it. Be concise.\n\n"
-        f"REPORT EXCERPTS:\n{context}\n\n"
+        f"You are assisting a geologist with Norwegian DISKOS well {well_id}. "
+        f"Two kinds of context follow.\n\n"
+        f"DATA INVENTORY (the files this well has):\n{inventory}\n\n"
+        f"REPORT EXCERPTS (geology / biostratigraphy text, if any):\n{reports}\n\n"
+        f"Answer the question. Use the DATA INVENTORY to describe what data or files "
+        f"the well holds. Use the REPORT EXCERPTS for geological interpretation (ages, "
+        f"zones, species, depths), citing the report file name. If the excerpts do not "
+        f"cover something asked, say the reports do not include it. Do not invent "
+        f"findings. Be concise.\n\n"
         f"QUESTION: {question}"
     )
 
 
 def answer_question(well, question: str, client: LLMClient | None = None) -> dict:
-    """Answer a question about a well, grounded in its report PDFs."""
+    """Answer a question about a well, grounded in its inventory + report PDFs."""
     client = client or make_client()
     report_paths = well.files.get("geology", [])
     report_text, used = extract_report_text(report_paths)
-    prompt = build_prompt(well.well_id, well.counts(), report_text, question)
+    prompt = build_prompt(well.well_id, format_inventory(well), report_text, question)
     reply = client.ask(prompt, max_tokens=600, temperature=0.2)
     return {"answer": reply, "sources": used, "reports_available": [p.name for p in report_paths]}
