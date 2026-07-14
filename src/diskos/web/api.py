@@ -39,6 +39,69 @@ def _records(wide: pd.DataFrame) -> list[dict]:
     return frame.to_dict(orient="records")
 
 
+def _downsample(index, values, max_points: int = 1500):
+    """Evenly thin two parallel sequences to at most ``max_points`` pairs."""
+    n = len(index)
+    if n <= max_points:
+        step = 1
+    else:
+        step = int(np.ceil(n / max_points))
+    return list(index[::step]), list(values[::step])
+
+
+def _well_or_404(well_id: str):
+    root = diskos_root(load_config())
+    catalog = wells_mod.catalog(root)
+    if well_id not in catalog:
+        raise HTTPException(status_code=404, detail=f"Well {well_id} not found.")
+    return catalog[well_id]
+
+
+def _well_logs(well_id: str, mnemonic: str | None) -> list[dict]:
+    from ..welllog import curves as wl
+
+    files = []
+    for las in _well_or_404(well_id).logs:
+        df = wl.read_las(las)
+        mnems = wl.available_mnemonics(df)
+        gamma = None
+        try:
+            gamma = wl.gamma_column(df)
+        except KeyError:
+            pass
+        pick = mnemonic if (mnemonic and mnemonic in df.columns) else (gamma or (mnems[0] if mnems else None))
+        tracks = []
+        if pick:
+            series = df[pick].dropna()
+            depths, values = _downsample(list(series.index), [float(v) for v in series.to_numpy()])
+            tracks.append({
+                "mnemonic": pick,
+                "points": [{"depth": float(d), "value": float(v)} for d, v in zip(depths, values)],
+            })
+        files.append({"file": las.name, "mnemonics": mnems, "gamma": gamma, "tracks": tracks})
+    return files
+
+
+def _well_xrf(well_id: str, depth: int | None, range_type: str) -> list[dict]:
+    from ..xrf import fit as xrf
+
+    files = []
+    for csv in _well_or_404(well_id).xrf:
+        df = xrf.read_niton_csv(csv)
+        depths, ranges = xrf.depths_and_ranges(df)
+        rt = range_type if range_type in ranges else (ranges[0] if ranges else "")
+        d = depth if depth in depths else (depths[0] if depths else None)
+        spectrum = None
+        label = f"{d}m ({rt})"
+        if d is not None and label in df.index:
+            energy = xrf.energy_axis(df)
+            counts = df.loc[label].to_numpy(dtype=float)
+            e, c = _downsample(list(energy), list(counts), max_points=1200)
+            spectrum = {"depth": d, "range": rt, "energy": [float(x) for x in e], "counts": [float(x) for x in c]}
+        files.append({"file": csv.name, "depths": depths, "ranges": ranges, "spectrum": spectrum})
+    return files
+
+
 def _well_palynology(well_id: str) -> list[dict]:
     cfg = load_config()
     root = diskos_root(cfg)
@@ -120,6 +183,19 @@ def create_app() -> FastAPI:
     @app.get("/api/wells/{well_id}/palynology")
     def well_palynology(well_id: str, user: str = Depends(current_user)) -> dict:
         return {"well_id": well_id, "files": _well_palynology(well_id)}
+
+    @app.get("/api/wells/{well_id}/logs")
+    def well_logs(well_id: str, mnemonic: str = None, user: str = Depends(current_user)) -> dict:
+        return {"well_id": well_id, "files": _well_logs(well_id, mnemonic)}
+
+    @app.get("/api/wells/{well_id}/xrf")
+    def well_xrf(
+        well_id: str,
+        depth: int = None,
+        range_type: str = "Main Range",
+        user: str = Depends(current_user),
+    ) -> dict:
+        return {"well_id": well_id, "files": _well_xrf(well_id, depth, range_type)}
 
     # Static assets (styles, script). Mounted last so it never shadows /api routes.
     if STATIC_DIR.is_dir():
