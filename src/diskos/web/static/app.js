@@ -233,10 +233,16 @@ function renderFilesPanel(container, detail) {
     group.innerHTML = `<h3>${TYPE_LABEL[type]} <span class="ct">${files.length}</span></h3>`;
     const ul = document.createElement("ul");
     ul.className = "filelist";
-    for (const name of files) {
+    for (const f of files) {
       const li = document.createElement("li");
-      li.textContent = name;
-      if (biostrat.has(name)) {
+      const a = document.createElement("a");
+      a.className = "filelink";
+      a.href = `/api/wells/${encodeURIComponent(detail.well_id)}/file?path=${encodeURIComponent(f.rel)}`;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = f.name;
+      li.appendChild(a);
+      if (biostrat.has(f.name)) {
         const b = document.createElement("span");
         b.className = "biostrat-tag";
         b.textContent = "biostrat";
@@ -249,7 +255,7 @@ function renderFilesPanel(container, detail) {
   }
   const note = document.createElement("p");
   note.className = "msg";
-  note.textContent = "File contents are not yet served here. Logs are charted in the Well logs tab; report and image viewing are coming.";
+  note.textContent = "Click a file to open it (PDFs and images view in a new tab). Logs are charted in the Well logs tab.";
   container.appendChild(note);
 }
 

@@ -108,11 +108,28 @@ def create_app() -> FastAPI:
         return {
             "well_id": well_id,
             "counts": w.counts(),
-            "files": {t: [p.name for p in ps] for t, ps in w.files.items()},
+            "files": {
+                t: [{"name": p.name, "rel": str(p.relative_to(w.path))} for p in ps]
+                for t, ps in w.files.items()
+            },
             "biostrat": [
                 p.name for ps in w.files.values() for p in ps if wells_mod.is_biostrat(p)
             ],
         }
+
+    @app.get("/api/wells/{well_id}/file")
+    def well_file(well_id: str, path: str, user: str = Depends(current_user)) -> FileResponse:
+        # Serve a file from within the well directory. Guard against traversal:
+        # the resolved target must live under the (resolved) well root.
+        well = _well_or_404(well_id)
+        well_root = well.path.resolve()
+        target = (well_root / path).resolve()
+        if target != well_root and well_root not in target.parents:
+            raise HTTPException(status_code=403, detail="Path escapes the well directory.")
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="File not found.")
+        # inline so PDFs/images render in the browser tab instead of downloading.
+        return FileResponse(target, content_disposition_type="inline")
 
     @app.get("/api/wells/{well_id}/logs")
     def well_logs(well_id: str, mnemonic: str = None, user: str = Depends(current_user)) -> dict:

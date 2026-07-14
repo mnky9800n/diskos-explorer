@@ -43,6 +43,32 @@ def test_unknown_well_404(client):
     assert client.get("/api/wells/99_99-9").status_code == 404
 
 
+def test_detail_files_carry_rel_paths(client):
+    files = client.get("/api/wells/35_9-1").json()["files"]
+    geo = files["geology"][0]
+    assert geo["name"].endswith(".PDF")
+    assert geo["rel"].startswith("GEOLOGY/")
+
+
+def test_file_serving(client):
+    resp = client.get(
+        "/api/wells/35_9-1/file",
+        params={"path": "GEOLOGY/35_9-1__GEOLOGY__BIOSTRAT_REPORT_1.PDF"},
+    )
+    assert resp.status_code == 200
+    assert resp.content.startswith(b"%PDF")
+
+
+def test_file_serving_blocks_traversal(client):
+    resp = client.get("/api/wells/35_9-1/file", params={"path": "../../etc/passwd"})
+    assert resp.status_code == 403
+
+
+def test_file_serving_404_for_missing(client):
+    resp = client.get("/api/wells/35_9-1/file", params={"path": "GEOLOGY/nope.pdf"})
+    assert resp.status_code == 404
+
+
 def test_ask_endpoint_uses_model(client, monkeypatch):
     class FakeClient:
         def ask(self, prompt, **kwargs):
