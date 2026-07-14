@@ -102,6 +102,49 @@ def create_app() -> FastAPI:
         root = diskos_root(load_config())
         return [{"well_id": wid} for wid in wells_mod.list_well_ids(root)]
 
+    @app.get("/api/corpus")
+    def corpus_stats(user: str = Depends(current_user)) -> dict:
+        from . import corpus
+
+        index = corpus.build_index(diskos_root(load_config()))
+        return corpus.stats(index)
+
+    @app.get("/api/corpus/find")
+    def corpus_find(
+        type: str = None, biostrat: bool = False, core: bool = False, quadrant: str = None,
+        user: str = Depends(current_user),
+    ) -> dict:
+        from . import corpus
+
+        index = corpus.build_index(diskos_root(load_config()))
+        matches = corpus.find(index, data_type=type, biostrat=biostrat or None, core=core or None, quadrant=quadrant)
+        return {"count": len(matches), "wells": matches}
+
+    @app.post("/api/corpus/ask")
+    def corpus_ask(body: AskBody, user: str = Depends(current_user)) -> dict:
+        from . import assistant, corpus
+
+        s = corpus.stats(corpus.build_index(diskos_root(load_config())))
+        coverage = ", ".join(f"{n} {t}" for t, n in s["coverage"].items())
+        top_q = ", ".join(f"quadrant {q}: {n}" for q, n in list(s["by_quadrant"].items())[:12])
+        context = (
+            f"The DISKOS archive has {s['n_wells']} wells. "
+            f"Data coverage (wells with each type): {coverage}. "
+            f"{s['biostrat']} wells have a biostratigraphy report; {s['core']} have core. "
+            f"Wells per quadrant (top): {top_q}."
+        )
+        prompt = (
+            "You are answering a question about the whole Norwegian DISKOS well archive, "
+            "using only the corpus statistics below. For requests to list specific wells, "
+            "say the Finder should be used. Do not invent numbers.\n\n"
+            f"CORPUS STATISTICS:\n{context}\n\nQUESTION: {body.question}"
+        )
+        try:
+            answer = assistant.make_client().ask(prompt, max_tokens=500, temperature=0.2)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"Assistant unavailable: {exc}")
+        return {"question": body.question, "answer": answer, "stats": s}
+
     @app.get("/api/wells/{well_id}")
     def well_detail(well_id: str, user: str = Depends(current_user)) -> dict:
         w = _well_or_404(well_id)

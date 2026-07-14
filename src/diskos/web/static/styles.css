@@ -135,6 +135,21 @@ body {
 .tabpanel { background: var(--face); box-shadow: var(--raised); padding: 14px; }
 .tabpanel[hidden] { display: none; }
 
+/* ---- corpus overview ---- */
+.corpus-btn { display: block; width: 100%; margin-bottom: 8px; }
+.tiles { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.tile { background: #fff; box-shadow: var(--sunken); padding: 8px 12px; min-width: 96px; }
+.tile-n { font-family: var(--mono); font-size: 20px; font-weight: bold; }
+.tile-t { font-size: 11px; }
+.tile-pct { font-family: var(--mono); font-size: 11px; color: #404040; }
+.finder { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.finder .field { width: auto; }
+.finder-q { width: 130px; }
+.finder label { font-size: 12px; display: inline-flex; align-items: center; gap: 3px; }
+.finder-results { margin-bottom: 8px; }
+.finder-meta { color: #404040; font-family: var(--sans); font-size: 11px; }
+.filelist li:hover .finder-meta { color: #fff; }
+
 /* ---- assistant ---- */
 .assistant-intro { margin: 0 0 10px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }

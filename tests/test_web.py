@@ -43,6 +43,30 @@ def test_unknown_well_404(client):
     assert client.get("/api/wells/99_99-9").status_code == 404
 
 
+def test_corpus_stats_endpoint(client):
+    d = client.get("/api/corpus").json()
+    assert d["n_wells"] == 3
+    assert d["biostrat"] == 1
+    assert d["coverage"].get("logs") == 1
+
+
+def test_corpus_find_endpoint(client):
+    d = client.get("/api/corpus/find", params={"biostrat": "true"}).json()
+    assert d["count"] == 1
+    assert d["wells"][0]["well_id"] == "35_9-1"
+
+
+def test_corpus_ask_endpoint(client, monkeypatch):
+    class FakeClient:
+        def ask(self, prompt, **kwargs):
+            return "About a third of the archive has biostratigraphy reports."
+
+    monkeypatch.setattr("diskos.web.assistant.make_client", lambda: FakeClient())
+    r = client.post("/api/corpus/ask", json={"question": "how much has biostrat?"})
+    assert r.status_code == 200
+    assert "biostrat" in r.json()["answer"]
+
+
 def test_detail_files_carry_rel_paths(client):
     files = client.get("/api/wells/35_9-1").json()["files"]
     geo = files["geology"][0]
