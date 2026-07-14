@@ -14,7 +14,7 @@ dependencies = [
 [project.optional-dependencies]
 # Deferred to their phases so the Phase 1 backbone stays light and easy to install.
 plot = ["matplotlib>=3.7", "openpyxl>=3.1"]   # Phase 2: palynology plots + xlsx tops
-welllog = ["welly>=0.5"]                        # Phase 3: LAS well logs
+welllog = ["lasio>=0.31"]                       # Phase 3: LAS well logs
 llm = ["openai>=1.0"]                           # Phase 4: model access
 xrf = ["PyMca5>=5.9"]                           # Phase 7: XRF (heavy, kept isolated)
 
@@ -24,7 +24,12 @@ diskos = "diskos.cli:app"
 [dependency-groups]
 # matplotlib/openpyxl are also in the `plot` extra; included here so `uv run
 # pytest` exercises the plotting module out of the box.
-dev = ["pytest>=8.0", "matplotlib>=3.7", "openpyxl>=3.1"]
+dev = [
+    "pytest>=8.0",
+    "matplotlib>=3.7",
+    "openpyxl>=3.1",
+    "lasio>=0.31",
+]
 
 [build-system]
 requires = ["hatchling"]

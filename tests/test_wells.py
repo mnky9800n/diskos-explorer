@@ -14,6 +14,15 @@ def test_catalog_discovers_well():
     assert cat["7_11-1"].paly[0].suffix == ".ASC"
 
 
+def test_catalog_groups_paly_and_logs_under_one_well():
+    # The .ASC (root) and the .LAS (7_11-1/LOGS/) share a derived well ID and
+    # group together, even though they live in different places.
+    cat = wells.catalog(SAMPLE_ROOT)
+    well = cat["7_11-1"]
+    assert len(well.logs) == 1
+    assert well.logs[0].suffix == ".LAS"
+
+
 def test_extract_well_id_generalizes_to_novel_ids():
     # None of these appear in Jack's notebooks; discovery must still work.
     assert wells.extract_well_id("16_2-3_R.ASC") == "16_2-3"
@@ -25,5 +34,5 @@ def test_classify_by_type():
     cat = wells.catalog(SAMPLE_ROOT)
     well = cat["7_11-1"]
     assert well.has("paly")
-    assert not well.has("logs")
+    assert well.has("logs")
     assert not well.has("xrf")

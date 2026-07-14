@@ -149,6 +149,41 @@ def plot(
     typer.echo(f"Wrote {out_path} ({len(frames)} well(s))")
 
 
+@app.command()
+def logs(
+    well: str = typer.Option(None, "--well", help="Plot one borehole by ID."),
+    all_wells: bool = typer.Option(False, "--all", help="Plot every borehole with logs."),
+    mnemonic: str = typer.Option(None, "--mnemonic", help="Curve mnemonic (default: gamma)."),
+    top: float = typer.Option(None, "--top", help="Top depth (m)."),
+    bottom: float = typer.Option(None, "--bottom", help="Bottom depth (m)."),
+    out_path: Path = typer.Option(Path("out/logs.png"), "--out", help="Output figure path."),
+) -> None:
+    """Plot gamma (or a chosen curve) as depth-aligned color tracks for correlation."""
+    from .welllog import curves as wl_curves
+    from .welllog import plot as wl_plot
+
+    root = diskos_root(load_config())
+    selected = _select_wells(root, well, all_wells)
+
+    tracks = {}
+    for well_id in sorted(selected):
+        entry = selected[well_id]
+        if not entry.logs:
+            continue
+        df = wl_curves.read_las(entry.logs[0])
+        name = mnemonic or wl_curves.gamma_column(df)
+        series = wl_curves.slice_depth(wl_curves.curve_series(df, name), top, bottom)
+        tracks[f"{well_id}:{name}"] = series
+
+    if not tracks:
+        typer.echo("No wells with logs in the selection.", err=True)
+        raise typer.Exit(code=1)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    wl_plot.plot_correlation(tracks, out_path=out_path)
+    typer.echo(f"Wrote {out_path} ({len(tracks)} track(s))")
+
+
 @taxa_app.command("suggest")
 def taxa_suggest(
     well: str = typer.Option(None, "--well", help="Suggest from one borehole."),
