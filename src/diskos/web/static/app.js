@@ -19,8 +19,12 @@ let ACTIVE = null;
 
 init();
 
+const setStatus = (left, right) => {
+  if (left != null) $("#status-left").textContent = left;
+  if (right != null) $("#status-right").textContent = right;
+};
+
 async function init() {
-  setupTheme();
   try {
     const res = await fetch("/api/me");
     if (res.status === 401) return showGate();
@@ -40,24 +44,11 @@ function showApp(email) {
   $("#gate").hidden = true; $("#app").hidden = false; $("#user").textContent = email;
 }
 
-function setupTheme() {
-  const root = document.documentElement;
-  const saved = localStorage.getItem("diskos-theme");
-  if (saved) root.setAttribute("data-theme", saved);
-  $("#theme").addEventListener("click", () => {
-    const cur = root.getAttribute("data-theme");
-    const isDark = cur === "dark" || (cur === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
-    const next = isDark ? "light" : "dark";
-    root.setAttribute("data-theme", next);
-    localStorage.setItem("diskos-theme", next);
-    if (ACTIVE) selectWell(ACTIVE, true);
-  });
-}
-
 // ---------- wells rail ----------
 async function loadWells() {
   WELLS = await fetchJSON("/api/wells");
   renderRail("");
+  setStatus("Ready", `${WELLS.length} wells`);
   $("#filter").addEventListener("input", (e) => renderRail(e.target.value.trim().toLowerCase()));
 }
 
@@ -108,6 +99,7 @@ function renderWell(detail) {
   head.className = "well-head";
   head.innerHTML = `<h2>${detail.well_id}</h2><span class="well-sub">${summary}</span>`;
   panel.appendChild(head);
+  setStatus(`Well: ${detail.well_id}`, `${total} file${total === 1 ? "" : "s"}`);
 
   if (!total) { panel.appendChild(msg("No data files for this well.")); return; }
 

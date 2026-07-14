@@ -1,55 +1,71 @@
 <!doctype html>
-<html lang="en" data-theme="auto">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DISKOS Explorer</title>
   <link rel="stylesheet" href="/static/styles.css" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2312161d'/%3E%3Crect x='6' width='4' height='16' fill='%23c17f10'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23c0c0c0'/%3E%3Crect x='1' y='1' width='14' height='4' fill='%23000080'/%3E%3C/svg%3E" />
 </head>
 <body>
-  <!-- Signed-out gate -->
+  <!-- Signed-out dialog -->
   <div id="gate" class="gate" hidden>
-    <div class="gate-card">
-      <div class="gate-mark" aria-hidden="true"></div>
-      <h1>DISKOS Explorer</h1>
-      <p>Borehole data from the Norwegian DISKOS archive: palynology, well logs, and
-         the wiki built over them.</p>
-      <a id="signin" class="btn-signin" href="/auth/login">Sign in with Google</a>
-      <p id="gate-note" class="gate-note"></p>
+    <div class="window dialog">
+      <div class="titlebar">
+        <span class="titlebar-text"><span class="titleico"></span>Sign in - DISKOS Explorer</span>
+        <div class="titlebar-btns"><button class="tbtn" aria-label="Close">✕</button></div>
+      </div>
+      <div class="dialog-body">
+        <p>Borehole data from the Norwegian DISKOS archive: well logs, biostratigraphy
+           reports, and the wiki built over them.</p>
+        <div class="dialog-actions">
+          <a id="signin" class="btn" href="/auth/login">Sign in with Google</a>
+        </div>
+        <p id="gate-note" class="gate-note"></p>
+      </div>
     </div>
   </div>
 
-  <!-- App -->
+  <!-- Main window -->
   <div id="app" class="app" hidden>
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-name">DISKOS <b>Explorer</b></span>
-      </div>
-      <div class="topbar-right">
-        <span id="user" class="user"></span>
-        <button id="theme" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">◐</button>
-        <a id="logout" class="logout" href="/auth/logout">Sign out</a>
-      </div>
-    </header>
-
-    <div class="layout">
-      <aside class="rail">
-        <div class="rail-head">
-          <label class="rail-label" for="filter">Wells</label>
-          <input id="filter" class="filter" type="search" placeholder="Filter by ID" autocomplete="off" />
+    <div class="window main-window">
+      <div class="titlebar">
+        <span class="titlebar-text"><span class="titleico"></span>DISKOS Explorer</span>
+        <div class="titlebar-btns">
+          <button class="tbtn" aria-label="Minimize">_</button>
+          <button class="tbtn" aria-label="Maximize">□</button>
+          <button class="tbtn" aria-label="Close">✕</button>
         </div>
-        <div id="welllist" class="welllist" role="listbox" aria-label="Boreholes"></div>
-      </aside>
+      </div>
+      <div class="menubar">
+        <span class="menu"><u>F</u>ile</span>
+        <span class="menu"><u>V</u>iew</span>
+        <span class="menu"><u>H</u>elp</span>
+        <span class="menu-right"><span id="user" class="user"></span><a id="logout" class="menu-link" href="/auth/logout">Sign out</a></span>
+      </div>
 
-      <main id="main" class="main">
-        <div id="empty" class="empty">
-          <div class="empty-rule" aria-hidden="true"></div>
-          <p>Select a well to read its palynology against depth.</p>
-        </div>
-        <section id="well" class="well" hidden></section>
-      </main>
+      <div class="window-body">
+        <aside class="rail window sunk">
+          <div class="rail-head">
+            <label class="rail-label" for="filter">Wells</label>
+            <input id="filter" class="field" type="search" placeholder="Filter by ID" autocomplete="off" />
+          </div>
+          <div id="welllist" class="welllist" role="listbox" aria-label="Boreholes"></div>
+        </aside>
+
+        <main id="main" class="main window sunk">
+          <div id="empty" class="empty">
+            <div class="empty-ico" aria-hidden="true"></div>
+            <p>Select a well to open it.</p>
+          </div>
+          <section id="well" class="well" hidden></section>
+        </main>
+      </div>
+
+      <div class="statusbar">
+        <span id="status-left" class="status-cell">Ready</span>
+        <span id="status-right" class="status-cell"></span>
+      </div>
     </div>
   </div>
 
