@@ -26,7 +26,7 @@ def test_index_served(client):
 
 
 def test_static_assets_served(client):
-    for path, needle in [("/static/app.js", "buildChartCard"), ("/static/styles.css", "depthchart")]:
+    for path, needle in [("/static/app.js", "renderFilesPanel"), ("/static/styles.css", "depthchart")]:
         resp = client.get(path)
         assert resp.status_code == 200, path
         assert needle in resp.text

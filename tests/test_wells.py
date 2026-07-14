@@ -1,4 +1,4 @@
-"""Borehole discovery tests: the catalog must generalize to any well."""
+"""Borehole catalog tests against a real-structure fixture tree."""
 
 from pathlib import Path
 
@@ -7,32 +7,37 @@ from diskos import wells
 SAMPLE_ROOT = Path(__file__).parent / "data" / "diskos_sample"
 
 
-def test_catalog_discovers_well():
+def test_list_well_ids_excludes_admin():
+    ids = wells.list_well_ids(SAMPLE_ROOT)
+    assert ids == ["25_7-5", "35_9-1", "7_11-1"]
+    assert "000-README" not in ids  # admin dir skipped
+
+
+def test_well_files_buckets_by_type():
+    assert wells.well_files(SAMPLE_ROOT, "7_11-1").counts() == {"logs": 1}
+    assert wells.well_files(SAMPLE_ROOT, "35_9-1").counts() == {"geology": 1, "images": 1}
+    assert wells.well_files(SAMPLE_ROOT, "25_7-5").counts() == {"geochem": 1}
+
+
+def test_classify_real_patterns():
+    # A LAS under LOGS is a petrophysical log; under WELL_PATH it is a survey.
+    assert wells.classify("LOGS", "35_10-8_S_WLC_COMPOSITE_1.LAS") == "logs"
+    assert wells.classify("WELL_PATH", "6603_12-1__LOGS__WELLPATH_COMPUTED__1.LAS") == "deviation"
+    # .ASC here is Tigress (well path / checkshot), never StrataBugs palynology.
+    assert wells.classify("WELL_PATH", "35_9-1__WELL_PATH__8109DEV.ASC") == "deviation"
+    assert wells.classify("WELL_SEISMIC", "35_9-1__WELL_SEISMIC__8109CHKSHTMD.ASC") == "seismic"
+    # Reports / geology PDFs; cuttings photos; QEMSCAN/XRF csv.
+    assert wells.classify("GEOLOGY", "35_9-1__GEOLOGY__BIOSTRAT_REPORT_1.PDF") == "geology"
+    assert wells.classify("DRILLING", "25_2-18_S_CUTTINGS_PHOTO_QEMSCAN_M_1.PNG") == "images"
+    assert wells.classify("DRILLING", "25_2-18_S_CUTTINGS_QEMSCAN_RAW_1.CSV") == "geochem"
+
+
+def test_is_biostrat():
+    assert wells.is_biostrat(Path("35_9-1__GEOLOGY__BIOSTRAT_REPORT_1.PDF"))
+    assert not wells.is_biostrat(Path("35_9-1__GEOLOGY__STRAT_REPORT_1.PDF"))
+
+
+def test_catalog_recurses_all_wells():
     cat = wells.catalog(SAMPLE_ROOT)
-    assert "7_11-1" in cat
-    assert len(cat["7_11-1"].paly) == 1
-    assert cat["7_11-1"].paly[0].suffix == ".ASC"
-
-
-def test_catalog_groups_paly_and_logs_under_one_well():
-    # The .ASC (root) and the .LAS (7_11-1/LOGS/) share a derived well ID and
-    # group together, even though they live in different places.
-    cat = wells.catalog(SAMPLE_ROOT)
-    well = cat["7_11-1"]
-    assert len(well.logs) == 1
-    assert well.logs[0].suffix == ".LAS"
-
-
-def test_extract_well_id_generalizes_to_novel_ids():
-    # None of these appear in Jack's notebooks; discovery must still work.
-    assert wells.extract_well_id("16_2-3_R.ASC") == "16_2-3"
-    assert wells.extract_well_id("6608_10-1__LOGS__COMPOSITE.LAS") == "6608_10-1"
-    assert wells.extract_well_id("no_well_here.txt") is None
-
-
-def test_classify_by_type():
-    cat = wells.catalog(SAMPLE_ROOT)
-    well = cat["7_11-1"]
-    assert well.has("paly")
-    assert well.has("logs")
-    assert not well.has("xrf")
+    assert set(cat) == {"25_7-5", "35_9-1", "7_11-1"}
+    assert cat["7_11-1"].has("logs")

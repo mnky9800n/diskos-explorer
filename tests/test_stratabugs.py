@@ -8,7 +8,7 @@ from diskos.palyno.aggregate import create_wide_format
 from diskos.palyno.suggest import suggest_targets
 from diskos.palyno.taxa import fuzzy_match_taxa, normalize_taxon_name_for_columns
 
-SAMPLE = Path(__file__).parent / "data" / "diskos_sample" / "7_11-1_S.ASC"
+SAMPLE = Path(__file__).parent / "data" / "curated_paly" / "7_11-1_S.ASC"
 TARGET = "Apectodinium homomorphum"
 SIMILAR = "Apectodinium homomorphm"
 
