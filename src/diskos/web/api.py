@@ -15,11 +15,20 @@ from pathlib import Path
 
 import numpy as np
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+def base_path() -> str:
+    """URL prefix the app is served under (default '/'), with a trailing slash.
+
+    Set DISKOS_BASE_PATH=/diskos-explorer/ when the app is behind a subpath proxy.
+    """
+    b = os.environ.get("DISKOS_BASE_PATH", "/")
+    return b if b.endswith("/") else b + "/"
 
 from pydantic import BaseModel
 
@@ -100,8 +109,9 @@ def create_app() -> FastAPI:
         return {"email": user, "dev_mode": dev_mode()}
 
     @app.get("/")
-    def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+    def index() -> HTMLResponse:
+        html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        return HTMLResponse(html.replace("__BASE__", base_path()))
 
     @app.get("/api/wells")
     def list_wells(user: str = Depends(current_user)) -> list[dict]:
@@ -253,7 +263,9 @@ def _register_oauth(app: FastAPI) -> None:
 
     @app.get("/auth/login")
     async def login(request: Request):
-        redirect_uri = request.url_for("auth_callback")
+        # Behind a subpath proxy the request URL is internal, so the public
+        # callback must be pinned via env (must match the Google-registered URI).
+        redirect_uri = os.environ.get("DISKOS_OAUTH_REDIRECT") or str(request.url_for("auth_callback"))
         return await oauth.google.authorize_redirect(request, redirect_uri)
 
     @app.get("/auth/callback", name="auth_callback")
@@ -266,12 +278,12 @@ def _register_oauth(app: FastAPI) -> None:
         if not is_allowed(email):
             raise HTTPException(status_code=403, detail=f"{email} is not allowlisted.")
         request.session["user"] = email
-        return RedirectResponse(url="/")
+        return RedirectResponse(url=base_path())
 
     @app.get("/auth/logout")
     async def logout(request: Request):
         request.session.pop("user", None)
-        return RedirectResponse(url="/")
+        return RedirectResponse(url=base_path())
 
 
 # Module-level app for `uvicorn diskos.web.api:app`.

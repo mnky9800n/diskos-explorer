@@ -26,7 +26,7 @@ const setStatus = (left, right) => {
 
 async function init() {
   try {
-    const res = await fetch("/api/me");
+    const res = await fetch("api/me");
     if (res.status === 401) return showGate();
     if (!res.ok) throw new Error("auth");
     showApp((await res.json()).email);
@@ -46,7 +46,7 @@ function showApp(email) {
 
 // ---------- wells rail ----------
 async function loadWells() {
-  WELLS = await fetchJSON("/api/wells");
+  WELLS = await fetchJSON("api/wells");
   renderRail("");
   setStatus("Ready", `${WELLS.length} wells`);
   $("#filter").addEventListener("input", (e) => renderRail(e.target.value.trim().toLowerCase()));
@@ -106,7 +106,7 @@ function renderWorkflow(container) {
     pending.body.appendChild(msg("Rendering the plot…"));
     outputs.appendChild(pending.node);
     try {
-      const res = await fetch("/api/workflow/run", {
+      const res = await fetch("api/workflow/run", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ well_id: wid.value.trim(), kind: "log", instruction: instr.value.trim() }),
       });
@@ -146,7 +146,7 @@ async function showCorpus() {
   panel.scrollTop = 0;
   panel.replaceChildren(loadingMsg());
   try {
-    renderCorpusPanel(panel, await fetchJSON("/api/corpus"));
+    renderCorpusPanel(panel, await fetchJSON("api/corpus"));
   } catch (e) {
     panel.replaceChildren(errorMsg("Could not load the corpus overview."));
   }
@@ -199,7 +199,7 @@ function renderCorpusPanel(container, stats) {
     if (core.checked) params.set("core", "true");
     results.replaceChildren(loadingMsg());
     try {
-      const d = await fetchJSON("/api/corpus/find?" + params.toString());
+      const d = await fetchJSON("api/corpus/find?" + params.toString());
       results.replaceChildren(sectionLabel(`${d.count} well${d.count === 1 ? "" : "s"}`));
       const ul = document.createElement("ul"); ul.className = "filelist";
       for (const w of d.wells) {
@@ -230,7 +230,7 @@ function renderCorpusPanel(container, stats) {
     const q = box.value.trim(); if (!q) return;
     aout.replaceChildren(msg("Thinking…")); abtn.disabled = true;
     try {
-      const res = await fetch("/api/corpus/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+      const res = await fetch("api/corpus/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
       const d = await res.json();
       const t = document.createElement("div"); t.className = "answer-text"; t.textContent = d.answer;
@@ -271,7 +271,7 @@ async function selectWell(id, keepScroll) {
   if (!keepScroll) panel.scrollTop = 0;
   panel.replaceChildren(loadingMsg());
   try {
-    renderWell(await fetchJSON(`/api/wells/${encodeURIComponent(id)}`));
+    renderWell(await fetchJSON(`api/wells/${encodeURIComponent(id)}`));
   } catch (e) {
     panel.replaceChildren(errorMsg("Could not load this well."));
   }
@@ -295,8 +295,8 @@ function renderWell(detail) {
   const id = detail.well_id;
   const tabs = [];
   tabs.push({ label: "Assistant", render: (c) => renderAssistantPanel(c, detail) });
-  if (detail.counts.logs) tabs.push({ label: "Well logs", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/logs`), render: renderLogsPanel });
-  if (detail.counts.geology) tabs.push({ label: "Graph", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/graph`), render: renderGraphPanel });
+  if (detail.counts.logs) tabs.push({ label: "Well logs", load: () => fetchJSON(`api/wells/${encodeURIComponent(id)}/logs`), render: renderLogsPanel });
+  if (detail.counts.geology) tabs.push({ label: "Graph", load: () => fetchJSON(`api/wells/${encodeURIComponent(id)}/graph`), render: renderGraphPanel });
   tabs.push({ label: "Files", render: (c) => renderFilesPanel(c, detail) });
   buildTabs(panel, tabs);
 }
@@ -390,7 +390,7 @@ function renderAssistantPanel(container, detail) {
     out.replaceChildren(msg("Thinking… (the local model can take a moment)"));
     btn.disabled = true;
     try {
-      const res = await fetch(`/api/wells/${encodeURIComponent(id)}/ask`, {
+      const res = await fetch(`api/wells/${encodeURIComponent(id)}/ask`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
@@ -430,7 +430,7 @@ function renderFilesPanel(container, detail) {
       const li = document.createElement("li");
       const a = document.createElement("a");
       a.className = "filelink";
-      a.href = `/api/wells/${encodeURIComponent(detail.well_id)}/file?path=${encodeURIComponent(f.rel)}`;
+      a.href = `api/wells/${encodeURIComponent(detail.well_id)}/file?path=${encodeURIComponent(f.rel)}`;
       a.target = "_blank";
       a.rel = "noopener";
       a.textContent = f.name;
