@@ -97,7 +97,23 @@ def create_app() -> FastAPI:
     app.add_middleware(
         SessionMiddleware,
         secret_key=os.environ.get("DISKOS_SESSION_SECRET", "dev-insecure-secret"),
+        same_site="lax",
+        https_only=os.environ.get("DISKOS_COOKIE_SECURE", "0") == "1",
+        domain=os.environ.get("DISKOS_COOKIE_DOMAIN") or None,  # e.g. .johnspace.xyz
     )
+    # CORS so the Pages front-end (a different subdomain) can call the API with the
+    # session cookie. Added after SessionMiddleware so it wraps it (handles preflight).
+    cors_origins = os.environ.get("DISKOS_CORS_ORIGIN")
+    if cors_origins:
+        from fastapi.middleware.cors import CORSMiddleware
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[o.strip() for o in cors_origins.split(",") if o.strip()],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     _register_oauth(app)
 
     @app.get("/health")
@@ -111,7 +127,8 @@ def create_app() -> FastAPI:
     @app.get("/")
     def index() -> HTMLResponse:
         html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-        return HTMLResponse(html.replace("__BASE__", base_path()))
+        html = html.replace("__BASE__", base_path()).replace("__API_BASE__", os.environ.get("DISKOS_API_BASE", ""))
+        return HTMLResponse(html)
 
     @app.get("/api/wells")
     def list_wells(user: str = Depends(current_user)) -> list[dict]:
@@ -278,12 +295,12 @@ def _register_oauth(app: FastAPI) -> None:
         if not is_allowed(email):
             raise HTTPException(status_code=403, detail=f"{email} is not allowlisted.")
         request.session["user"] = email
-        return RedirectResponse(url=base_path())
+        return RedirectResponse(url=os.environ.get("DISKOS_FRONTEND_URL") or base_path())
 
     @app.get("/auth/logout")
     async def logout(request: Request):
         request.session.pop("user", None)
-        return RedirectResponse(url=base_path())
+        return RedirectResponse(url=os.environ.get("DISKOS_FRONTEND_URL") or base_path())
 
 
 # Module-level app for `uvicorn diskos.web.api:app`.

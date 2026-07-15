@@ -12,7 +12,9 @@ const TYPE_LABEL = {
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const cssvar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const fetchJSON = (url) => fetch(url).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
+const API_ROOT = (window.API_BASE || "").replace(/\/+$/, "");
+const apiUrl = (p) => API_ROOT + (p[0] === "/" ? p : "/" + p);
+const fetchJSON = (url) => fetch(apiUrl(url), { credentials: "include" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
 
 let WELLS = [];
 let ACTIVE = null;
@@ -26,7 +28,7 @@ const setStatus = (left, right) => {
 
 async function init() {
   try {
-    const res = await fetch("api/me");
+    const res = await fetch(apiUrl("api/me"));
     if (res.status === 401) return showGate();
     if (!res.ok) throw new Error("auth");
     showApp((await res.json()).email);
@@ -37,10 +39,12 @@ async function init() {
 }
 
 function showGate(note) {
+  const si = $("#signin"); if (si) si.href = apiUrl("auth/login");
   $("#gate").hidden = false; $("#app").hidden = true;
   if (note) $("#gate-note").textContent = note;
 }
 function showApp(email) {
+  const lo = $("#logout"); if (lo) lo.href = apiUrl("auth/logout");
   $("#gate").hidden = true; $("#app").hidden = false; $("#user").textContent = email;
 }
 
@@ -106,8 +110,8 @@ function renderWorkflow(container) {
     pending.body.appendChild(msg("Rendering the plot…"));
     outputs.appendChild(pending.node);
     try {
-      const res = await fetch("api/workflow/run", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+      const res = await fetch(apiUrl("api/workflow/run"), {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ well_id: wid.value.trim(), kind: "log", instruction: instr.value.trim() }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
@@ -230,7 +234,7 @@ function renderCorpusPanel(container, stats) {
     const q = box.value.trim(); if (!q) return;
     aout.replaceChildren(msg("Thinking…")); abtn.disabled = true;
     try {
-      const res = await fetch("api/corpus/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+      const res = await fetch(apiUrl("api/corpus/ask"), { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
       const d = await res.json();
       const t = document.createElement("div"); t.className = "answer-text"; t.textContent = d.answer;
@@ -390,8 +394,8 @@ function renderAssistantPanel(container, detail) {
     out.replaceChildren(msg("Thinking… (the local model can take a moment)"));
     btn.disabled = true;
     try {
-      const res = await fetch(`api/wells/${encodeURIComponent(id)}/ask`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }),
+      const res = await fetch(apiUrl(`api/wells/${encodeURIComponent(id)}/ask`), {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
       const data = await res.json();
@@ -430,7 +434,7 @@ function renderFilesPanel(container, detail) {
       const li = document.createElement("li");
       const a = document.createElement("a");
       a.className = "filelink";
-      a.href = `api/wells/${encodeURIComponent(detail.well_id)}/file?path=${encodeURIComponent(f.rel)}`;
+      a.href = apiUrl(`api/wells/${encodeURIComponent(detail.well_id)}/file?path=${encodeURIComponent(f.rel)}`);
       a.target = "_blank";
       a.rel = "noopener";
       a.textContent = f.name;
