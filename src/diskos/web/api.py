@@ -15,11 +15,17 @@ from pathlib import Path
 
 import numpy as np
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+def base_path() -> str:
+    """URL prefix the app is served under (default '/'), trailing slash."""
+    b = os.environ.get("DISKOS_BASE_PATH", "/")
+    return b if b.endswith("/") else b + "/"
 
 from pydantic import BaseModel
 
@@ -88,7 +94,22 @@ def create_app() -> FastAPI:
     app.add_middleware(
         SessionMiddleware,
         secret_key=os.environ.get("DISKOS_SESSION_SECRET", "dev-insecure-secret"),
+        same_site="lax",
+        https_only=os.environ.get("DISKOS_COOKIE_SECURE", "0") == "1",
+        domain=os.environ.get("DISKOS_COOKIE_DOMAIN") or None,  # e.g. .johnspace.xyz
     )
+    # CORS so the Pages front-end (different subdomain) can call the API with the cookie.
+    cors_origins = os.environ.get("DISKOS_CORS_ORIGIN")
+    if cors_origins:
+        from fastapi.middleware.cors import CORSMiddleware
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[o.strip() for o in cors_origins.split(",") if o.strip()],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
     _register_oauth(app)
 
     @app.get("/health")
@@ -100,8 +121,10 @@ def create_app() -> FastAPI:
         return {"email": user, "dev_mode": dev_mode()}
 
     @app.get("/")
-    def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+    def index() -> HTMLResponse:
+        html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        html = html.replace("__BASE__", base_path()).replace("__API_BASE__", os.environ.get("DISKOS_API_BASE", ""))
+        return HTMLResponse(html)
 
     @app.get("/api/wells")
     def list_wells(user: str = Depends(current_user)) -> list[dict]:
@@ -253,7 +276,7 @@ def _register_oauth(app: FastAPI) -> None:
 
     @app.get("/auth/login")
     async def login(request: Request):
-        redirect_uri = request.url_for("auth_callback")
+        redirect_uri = os.environ.get("DISKOS_OAUTH_REDIRECT") or str(request.url_for("auth_callback"))
         return await oauth.google.authorize_redirect(request, redirect_uri)
 
     @app.get("/auth/callback", name="auth_callback")
@@ -266,12 +289,12 @@ def _register_oauth(app: FastAPI) -> None:
         if not is_allowed(email):
             raise HTTPException(status_code=403, detail=f"{email} is not allowlisted.")
         request.session["user"] = email
-        return RedirectResponse(url="/")
+        return RedirectResponse(url=os.environ.get("DISKOS_FRONTEND_URL") or base_path())
 
     @app.get("/auth/logout")
     async def logout(request: Request):
         request.session.pop("user", None)
-        return RedirectResponse(url="/")
+        return RedirectResponse(url=os.environ.get("DISKOS_FRONTEND_URL") or base_path())
 
 
 # Module-level app for `uvicorn diskos.web.api:app`.

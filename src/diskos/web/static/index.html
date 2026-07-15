@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <base href="__BASE__" />
   <title>DISKOS Explorer</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="static/styles.css" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23c0c0c0'/%3E%3Crect x='1' y='1' width='14' height='4' fill='%23000080'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -26,7 +27,7 @@
           <li>Ask a local AI about a well, grounded in its logs and reports</li>
           <li>See how reports connect to data, and build data workflows</li>
         </ul>
-        <a id="signin" class="btn btn-primary" href="/auth/login">Sign in with Google</a>
+        <a id="signin" class="btn btn-primary" href="auth/login">Sign in with Google</a>
         <p id="gate-note" class="gate-note"></p>
       </div>
     </div>
@@ -47,7 +48,7 @@
         <span class="menu"><u>F</u>ile</span>
         <span class="menu"><u>V</u>iew</span>
         <span class="menu"><u>H</u>elp</span>
-        <span class="menu-right"><span id="user" class="user"></span><a id="logout" class="menu-link" href="/auth/logout">Sign out</a></span>
+        <span class="menu-right"><span id="user" class="user"></span><a id="logout" class="menu-link" href="auth/logout">Sign out</a></span>
       </div>
 
       <div class="window-body">
@@ -77,6 +78,7 @@
     </div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <script>window.API_BASE = "__API_BASE__";</script>
+  <script src="static/app.js"></script>
 </body>
 </html>

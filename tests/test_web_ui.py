@@ -22,7 +22,7 @@ def test_index_served(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "DISKOS Explorer" in resp.text
-    assert "/static/app.js" in resp.text
+    assert "static/app.js" in resp.text
 
 
 def test_static_assets_served(client):
@@ -30,6 +30,19 @@ def test_static_assets_served(client):
         resp = client.get(path)
         assert resp.status_code == 200, path
         assert needle in resp.text
+
+
+def test_index_default_base(client):
+    assert '<base href="/"' in client.get("/").text
+
+
+def test_index_injects_subpath_base(monkeypatch):
+    monkeypatch.setenv("DISKOS_WEB_DEV", "1")
+    monkeypatch.setenv("DISKOS_ROOT", str(SAMPLE_ROOT))
+    monkeypatch.setenv("DISKOS_BASE_PATH", "/diskos-explorer/")
+    from diskos.web.api import create_app
+
+    assert '<base href="/diskos-explorer/"' in TestClient(create_app()).get("/").text
 
 
 def test_api_me_dev(client):
