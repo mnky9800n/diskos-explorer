@@ -140,3 +140,23 @@ def test_allowlist_blocks_non_listed_user(monkeypatch):
     # An allowlisted user (via dev header) gets through.
     ok = c.get("/api/wells", headers={"X-Dev-User": "someone@else.com"})
     assert ok.status_code == 200
+
+
+def test_oauth_login_does_not_treat_request_as_query_param(monkeypatch):
+    # Regression: `from __future__ import annotations` stringizes type hints, so
+    # FastAPI resolves `request: Request` against module globals. When Request was
+    # imported only inside _register_oauth, the string didn't resolve and FastAPI
+    # treated `request` as a required query param -> 422 on /auth/login.
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "dummy-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "dummy-secret")
+    monkeypatch.setenv("DISKOS_ROOT", str(SAMPLE_ROOT))
+    from fastapi.routing import APIRoute
+
+    from diskos.web.api import create_app
+
+    app = create_app()
+    login = next(
+        r for r in app.routes if isinstance(r, APIRoute) and r.path == "/auth/login"
+    )
+    # The framework recognized `request` as the Request object, not a query field.
+    assert [q.name for q in login.dependant.query_params] == []
