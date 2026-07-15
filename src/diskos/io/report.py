@@ -8,7 +8,25 @@ treat as "no extractable text" rather than an error.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+# "2037.5m - 2274.8m", "2037.5 - 2274.8 m", "2037-2275m"
+_INTERVAL_RE = re.compile(r"(\d{3,4}(?:\.\d+)?)\s*m?\s*[-–]\s*(\d{3,4}(?:\.\d+)?)\s*m", re.I)
+_MAX_DEPTH = 7000.0
+
+
+def depth_interval(text: str, max_depth: float = _MAX_DEPTH) -> list[float] | None:
+    """Widest plausible depth interval [top, bottom] mentioned in report text."""
+    tops, bots = [], []
+    for top, bottom in _INTERVAL_RE.findall(text):
+        top, bottom = float(top), float(bottom)
+        if top < bottom <= max_depth:
+            tops.append(top)
+            bots.append(bottom)
+    if not tops:
+        return None
+    return [min(tops), max(bots)]
 
 
 def read_pdf_text(

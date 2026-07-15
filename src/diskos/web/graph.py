@@ -19,25 +19,10 @@ from __future__ import annotations
 import re
 
 from .. import wells as wells_mod
+from ..io.report import depth_interval as report_interval
 
-# "2037.5m - 2274.8m", "2037.5 - 2274.8 m", "2037-2275m"
-_INTERVAL_RE = re.compile(r"(\d{3,4}(?:\.\d+)?)\s*m?\s*[-–]\s*(\d{3,4}(?:\.\d+)?)\s*m", re.I)
 _SAMPLE_RE = re.compile(r"\b(core|sidewall|swc|cutting)", re.I)
-_MAX_DEPTH = 7000.0
 _MAX_REPORT_PAGES = 6
-
-
-def report_interval(text: str) -> list[float] | None:
-    """Widest plausible depth interval [top, bottom] mentioned in report text."""
-    tops, bots = [], []
-    for a, b in _INTERVAL_RE.findall(text):
-        a, b = float(a), float(b)
-        if a < b <= _MAX_DEPTH:
-            tops.append(a)
-            bots.append(b)
-    if not tops:
-        return None
-    return [min(tops), max(bots)]
 
 
 def _overlaps(a: list[float], b: list[float]) -> bool:
