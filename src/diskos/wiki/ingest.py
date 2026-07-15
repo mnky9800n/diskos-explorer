@@ -389,11 +389,22 @@ def field_prompt(display: str, members: list[dict]) -> str:
         }
         for m in members
     ]
+    # Pass the tallies explicitly: models miscount list items, so never let the
+    # model derive these numbers itself.
+    counts = {
+        "boreholes": len(members),
+        "with_report": sum(1 for m in members if m["reports"]),
+        "with_core": sum(1 for m in members if m["inventory"].get("core")),
+        "with_logs": sum(1 for m in members if m["inventory"].get("logs")),
+    }
     return (
         f"Write a 3 to 5 sentence overview of {display}, a group of Norwegian boreholes, "
-        f"for a geologist. Note how many boreholes, what data exists across them, which have "
-        f"core or reports, and what is missing. Use only these facts, invent nothing. No em "
-        f"dashes.\n\nMEMBERS (JSON):\n{json.dumps(brief, default=str)}"
+        f"for a geologist. There are exactly {counts['boreholes']} boreholes: "
+        f"{counts['with_logs']} have logs, {counts['with_report']} have a report, "
+        f"{counts['with_core']} have core. Use these exact counts, do not state any other "
+        f"totals. Note what data exists across them and what is missing. Invent nothing. "
+        f"No em dashes.\n\nCOUNTS (authoritative):\n{json.dumps(counts)}\n\n"
+        f"MEMBERS (JSON):\n{json.dumps(brief, default=str)}"
     )
 
 
