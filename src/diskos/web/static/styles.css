@@ -135,6 +135,21 @@ body {
 .tabpanel { background: var(--face); box-shadow: var(--raised); padding: 14px; }
 .tabpanel[hidden] { display: none; }
 
+/* ---- report/data graph ---- */
+.graph-wrap { background: #fff; box-shadow: var(--sunken); padding: 10px; overflow: auto; }
+svg.graph { display: block; width: 100%; height: auto; min-width: 640px; }
+.gnode { cursor: default; }
+.gnode rect { fill: var(--face); stroke: var(--gray); stroke-width: 1; }
+.gnode-report rect { fill: #fff; stroke: var(--navy); stroke-width: 2; }
+.gnode-biostrat rect { fill: #e8e8ff; }
+.gnode-core rect { fill: #fff4e0; stroke: #8a5a00; }
+.gnode-label { font-family: var(--mono); font-size: 10px; fill: #000; pointer-events: none; }
+.gnode.on rect { fill: #ffffcc; stroke: var(--navy); stroke-width: 2; }
+.gnode.dim { opacity: 0.3; }
+.gedge { stroke: var(--gray); stroke-width: 1; }
+.gedge.on { stroke: var(--navy); stroke-width: 2; }
+.gedge.dim { opacity: 0.12; }
+
 /* ---- corpus overview ---- */
 .corpus-btn { display: block; width: 100%; margin-bottom: 8px; }
 .tiles { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
