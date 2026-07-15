@@ -51,7 +51,91 @@ async function loadWells() {
   setStatus("Ready", `${WELLS.length} wells`);
   $("#filter").addEventListener("input", (e) => renderRail(e.target.value.trim().toLowerCase()));
   $("#corpusbtn").addEventListener("click", showCorpus);
+  $("#workflowbtn").addEventListener("click", showWorkflow);
 }
+
+function showWorkflow() {
+  ACTIVE = null;
+  renderRail($("#filter").value.trim().toLowerCase());
+  $("#empty").hidden = true;
+  const panel = $("#well");
+  panel.hidden = false;
+  panel.scrollTop = 0;
+  renderWorkflow(panel);
+}
+
+function renderWorkflow(container) {
+  container.replaceChildren();
+  setStatus("Workflow", "example from Well_Logs notebook");
+
+  const head = document.createElement("div");
+  head.className = "well-head";
+  head.innerHTML = `<h2>Workflow</h2><span class="well-sub">connect a data source to a chat, generate output notes</span>`;
+  container.appendChild(head);
+  container.appendChild(sectionLabel("Example: plot a well log (from Jack's Well_Logs notebook)"));
+
+  const flow = document.createElement("div");
+  flow.className = "wf";
+  container.appendChild(flow);
+
+  // Source node
+  const src = wfNode("Data source", "wf-source");
+  const wid = document.createElement("input"); wid.className = "field"; wid.value = "35_9-1";
+  const srcRow = document.createElement("div"); srcRow.className = "wf-row";
+  srcRow.append(labelWrap("Well", wid), tag("gamma log"));
+  src.body.appendChild(srcRow);
+  flow.appendChild(src.node);
+  flow.appendChild(wfConnector());
+
+  // Chat node
+  const chat = wfNode("Chat", "wf-chat");
+  const instr = document.createElement("textarea"); instr.className = "ask-box field"; instr.rows = 2; instr.value = "plot the gamma log";
+  const runBtn = document.createElement("button"); runBtn.className = "btn"; runBtn.textContent = "Run ▸";
+  const runBar = document.createElement("div"); runBar.className = "ask-bar"; runBar.appendChild(runBtn);
+  chat.body.append(instr, runBar);
+  flow.appendChild(chat.node);
+  flow.appendChild(wfConnector());
+
+  // Outputs
+  const outputs = document.createElement("div"); outputs.className = "wf-outputs";
+  flow.appendChild(outputs);
+
+  const run = async () => {
+    runBtn.disabled = true;
+    const pending = wfNode("Output · generating…", "wf-output");
+    pending.body.appendChild(msg("Rendering the plot…"));
+    outputs.appendChild(pending.node);
+    try {
+      const res = await fetch("/api/workflow/run", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ well_id: wid.value.trim(), kind: "log", instruction: instr.value.trim() }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
+      const d = await res.json();
+      pending.node.remove();
+      const out = wfNode("Output · " + d.title, "wf-output");
+      const img = document.createElement("img"); img.className = "wf-img"; img.src = d.image; img.alt = d.title;
+      out.body.appendChild(img);
+      outputs.appendChild(out.node);
+    } catch (e) {
+      pending.body.replaceChildren(errorMsg("Could not run: " + e.message));
+    } finally { runBtn.disabled = false; }
+  };
+  runBtn.addEventListener("click", run);
+  run(); // seed the example output on open
+}
+
+function wfNode(title, cls) {
+  const node = document.createElement("div");
+  node.className = "wf-node " + cls;
+  const head = document.createElement("div"); head.className = "wf-node-title"; head.textContent = title;
+  const body = document.createElement("div"); body.className = "wf-node-body";
+  node.append(head, body);
+  return { node, body };
+}
+function wfConnector() { const c = document.createElement("div"); c.className = "wf-connector"; c.textContent = "▼"; return c; }
+function labelWrap(text, input) { const l = document.createElement("label"); l.className = "wf-field"; l.append(text + " ", input); return l; }
+function tag(t) { const s = document.createElement("span"); s.className = "wf-tag"; s.textContent = t; return s; }
 
 async function showCorpus() {
   ACTIVE = null;

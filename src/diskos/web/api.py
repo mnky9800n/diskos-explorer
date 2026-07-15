@@ -33,6 +33,13 @@ class AskBody(BaseModel):
     question: str
 
 
+class WorkflowBody(BaseModel):
+    well_id: str
+    kind: str = "log"
+    mnemonic: str | None = None
+    instruction: str = ""
+
+
 def _downsample(index, values, max_points: int = 1500):
     """Evenly thin two parallel sequences to at most ``max_points`` pairs."""
     n = len(index)
@@ -183,6 +190,17 @@ def create_app() -> FastAPI:
         from . import graph
 
         return graph.build_well_graph(_well_or_404(well_id))
+
+    @app.post("/api/workflow/run")
+    def workflow_run(body: WorkflowBody, user: str = Depends(current_user)) -> dict:
+        from . import workflow
+
+        well = _well_or_404(body.well_id)
+        try:
+            output = workflow.run(well, body.kind, body.mnemonic, body.instruction)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Could not run workflow: {exc}")
+        return {"well_id": body.well_id, **output}
 
     @app.post("/api/wells/{well_id}/ask")
     def well_ask(well_id: str, body: AskBody, user: str = Depends(current_user)) -> dict:

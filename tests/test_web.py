@@ -104,6 +104,14 @@ def test_ask_endpoint_uses_model(client, monkeypatch):
     assert "Jurassic" in resp.json()["answer"]
 
 
+def test_workflow_run_produces_plot(client):
+    r = client.post("/api/workflow/run", json={"well_id": "7_11-1", "kind": "log", "instruction": "plot gamma"})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["kind"] == "plot"
+    assert d["image"].startswith("data:image/png;base64,")
+
+
 def test_graph_endpoint(client):
     g = client.get("/api/wells/35_9-1/graph").json()
     assert g["well_id"] == "35_9-1"
