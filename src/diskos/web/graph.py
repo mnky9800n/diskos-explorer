@@ -45,13 +45,9 @@ def _overlaps(a: list[float], b: list[float]) -> bool:
 
 
 def _read_report_text(path) -> str:
-    from pypdf import PdfReader
+    from ..io.report import read_pdf_text
 
-    try:
-        reader = PdfReader(str(path))
-        return "".join((pg.extract_text() or "") for pg in reader.pages[:_MAX_REPORT_PAGES])
-    except Exception:
-        return ""
+    return read_pdf_text(path, max_pages=_MAX_REPORT_PAGES)
 
 
 def _log_range(path) -> list[float] | None:

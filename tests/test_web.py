@@ -45,9 +45,9 @@ def test_unknown_well_404(client):
 
 def test_corpus_stats_endpoint(client):
     d = client.get("/api/corpus").json()
-    assert d["n_wells"] == 3
+    assert d["n_wells"] == 4
     assert d["biostrat"] == 1
-    assert d["coverage"].get("logs") == 1
+    assert d["coverage"].get("logs") == 2
 
 
 def test_corpus_find_endpoint(client):

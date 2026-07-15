@@ -9,7 +9,7 @@ SAMPLE_ROOT = Path(__file__).parent / "data" / "diskos_sample"
 
 def test_list_well_ids_excludes_admin():
     ids = wells.list_well_ids(SAMPLE_ROOT)
-    assert ids == ["25_7-5", "35_9-1", "7_11-1"]
+    assert ids == ["25_7-5", "35_9-1", "7_11-1", "7_11-1_A"]
     assert "000-README" not in ids  # admin dir skipped
 
 
@@ -39,5 +39,5 @@ def test_is_biostrat():
 
 def test_catalog_recurses_all_wells():
     cat = wells.catalog(SAMPLE_ROOT)
-    assert set(cat) == {"25_7-5", "35_9-1", "7_11-1"}
+    assert set(cat) == {"25_7-5", "35_9-1", "7_11-1", "7_11-1_A"}
     assert cat["7_11-1"].has("logs")

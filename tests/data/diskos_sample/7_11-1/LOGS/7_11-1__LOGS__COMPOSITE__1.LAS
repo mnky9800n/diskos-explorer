@@ -7,6 +7,9 @@
  STEP.M                 1.0 :
  NULL.              -999.25 :
  WELL.           7/11-1 S   : WELL
+ FLD .           TESTFIELD  : Field Name
+ LATI.    56 30' 0.00" N    : SURF. LATITUDE
+ LONG.   003 12' 0.00" E    : SURF. LONGITUDE
 ~Curve Information
  DEPT.M                     : DEPTH
  GR  .GAPI                  : Gamma Ray

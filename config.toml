@@ -12,6 +12,8 @@ local_sample = "./data/DISKOS"
 prefer = "diskos_root"
 # Persistent human same/different calls on similar taxon names (relative to repo root).
 taxon_decisions = "taxon_decisions.csv"
+# Cached Sodir/NPD FactPages wellbore CSVs (gitignored; populated by `diskos npd fetch`).
+npd_dir = "./data/npd"
 
 [llm]
 # Cheap, always-on local model unless a caller explicitly asks for another profile.
@@ -22,7 +24,19 @@ default_profile = "jack-serve"
 [llm.profiles.jack-serve]
 # lambda-scalar Ollama: always-on, unmetered, data stays local. Serves Jack.
 base_url = "http://lambda-scalar:11434/v1"
-model = "qwen2.5:14b"
+model = "qwen2.5:32b"
+api_key_env = "OLLAMA_API_KEY"
+
+[llm.profiles.wiki-well]
+# Per-borehole wiki pages (~2362 of them). Fast, structured, already loaded local.
+base_url = "http://lambda-scalar:11434/v1"
+model = "qwen2.5:32b"
+api_key_env = "OLLAMA_API_KEY"
+
+[llm.profiles.wiki-field]
+# Field-level pages: cross-well synthesis where quality pays off. Local, free.
+base_url = "http://lambda-scalar:11434/v1"
+model = "llama3.3:70b"
 api_key_env = "OLLAMA_API_KEY"
 
 [llm.profiles.vision]
