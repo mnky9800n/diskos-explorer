@@ -257,3 +257,16 @@ svg.depthchart { display: block; width: 100%; height: auto; background: #fff; }
   .window-body { grid-template-columns: 1fr; }
   .rail { max-height: 180px; }
 }
+
+/* Wiki page view (rendered markdown inside a well tab) */
+.wiki { padding: 4px 2px; font-size: 12px; line-height: 1.5; }
+.wiki h3 { font-size: 14px; margin: 2px 0 8px; }
+.wiki h4 { font-size: 12px; margin: 14px 0 4px; border-bottom: 1px solid #808080; padding-bottom: 2px; }
+.wiki p { margin: 6px 0; }
+.wiki-list { margin: 4px 0 4px 18px; padding: 0; }
+.wiki-list li { margin: 2px 0; }
+.wiki-table { border-collapse: collapse; margin: 6px 0; width: 100%; }
+.wiki-table th, .wiki-table td { border: 1px solid #808080; padding: 2px 6px; text-align: left; }
+.wiki-table th { background: var(--face); }
+.wikilink { color: #000080; text-decoration: underline; cursor: pointer; }
+a.wikilink:hover { color: #1084d0; }

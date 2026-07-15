@@ -23,25 +23,25 @@ default_profile = "jack-serve"
 
 [llm.profiles.jack-serve]
 # lambda-scalar Ollama: always-on, unmetered, data stays local. Serves Jack.
-base_url = "http://lambda-scalar:11434/v1"
+base_url = "http://localhost:11434/v1"
 model = "qwen2.5:32b"
 api_key_env = "OLLAMA_API_KEY"
 
 [llm.profiles.wiki-well]
 # Per-borehole wiki pages (~2362 of them). Fast, structured, already loaded local.
-base_url = "http://lambda-scalar:11434/v1"
+base_url = "http://localhost:11434/v1"
 model = "qwen2.5:32b"
 api_key_env = "OLLAMA_API_KEY"
 
 [llm.profiles.wiki-field]
 # Field-level pages: cross-well synthesis where quality pays off. Local, free.
-base_url = "http://lambda-scalar:11434/v1"
+base_url = "http://localhost:11434/v1"
 model = "llama3.3:70b"
 api_key_env = "OLLAMA_API_KEY"
 
 [llm.profiles.vision]
 # Microscope-image triage/captioning. NOT reliable for species ID.
-base_url = "http://lambda-scalar:11434/v1"
+base_url = "http://localhost:11434/v1"
 model = "qwen2.5vl:7b"
 api_key_env = "OLLAMA_API_KEY"
 
