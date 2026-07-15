@@ -33,15 +33,20 @@ def read_pdf_text(
     path: str | Path,
     max_pages: int | None = None,
     max_chars: int | None = None,
+    max_bytes: int | None = 60 * 1024 * 1024,
 ) -> str:
     """Extract text from a PDF. Returns "" on failure or a scanned (imageless) PDF.
 
     ``max_pages`` limits how many pages are read (cheap first-pages skim);
-    ``max_chars`` truncates the result.
+    ``max_chars`` truncates the result. ``max_bytes`` skips very large files
+    (essentially always image-only scans in this archive) so a whole-archive
+    sweep does not stall parsing hundred-megabyte reports with no text layer.
     """
     from pypdf import PdfReader
 
     try:
+        if max_bytes is not None and Path(path).stat().st_size > max_bytes:
+            return ""
         reader = PdfReader(str(path))
         pages = reader.pages if max_pages is None else reader.pages[:max_pages]
         text = "".join((page.extract_text() or "") for page in pages)
