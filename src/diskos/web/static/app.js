@@ -28,7 +28,7 @@ const setStatus = (left, right) => {
 
 async function init() {
   try {
-    const res = await fetch(apiUrl("/api/me"));
+    const res = await fetch(apiUrl("/api/me"), { credentials: "include" });
     if (res.status === 401) return showGate();
     if (!res.ok) throw new Error("auth");
     showApp((await res.json()).email);

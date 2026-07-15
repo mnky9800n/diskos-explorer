@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 
 import numpy as np
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -262,7 +262,6 @@ def _register_oauth(app: FastAPI) -> None:
         return
 
     from authlib.integrations.starlette_client import OAuth
-    from fastapi import Request
     from fastapi.responses import RedirectResponse
 
     oauth = OAuth()
