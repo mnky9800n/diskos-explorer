@@ -104,6 +104,12 @@ def test_ask_endpoint_uses_model(client, monkeypatch):
     assert "Jurassic" in resp.json()["answer"]
 
 
+def test_graph_endpoint(client):
+    g = client.get("/api/wells/35_9-1/graph").json()
+    assert g["well_id"] == "35_9-1"
+    assert any(n["kind"] == "report" for n in g["nodes"])
+
+
 def test_logs_endpoint_returns_gamma_track(client):
     resp = client.get("/api/wells/7_11-1/logs")
     assert resp.status_code == 200

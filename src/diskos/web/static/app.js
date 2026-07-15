@@ -212,6 +212,7 @@ function renderWell(detail) {
   const tabs = [];
   tabs.push({ label: "Assistant", render: (c) => renderAssistantPanel(c, detail) });
   if (detail.counts.logs) tabs.push({ label: "Well logs", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/logs`), render: renderLogsPanel });
+  if (detail.counts.geology) tabs.push({ label: "Graph", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/graph`), render: renderGraphPanel });
   tabs.push({ label: "Files", render: (c) => renderFilesPanel(c, detail) });
   buildTabs(panel, tabs);
 }
@@ -365,6 +366,68 @@ function renderFilesPanel(container, detail) {
   note.className = "msg";
   note.textContent = "Click a file to open it (PDFs and images view in a new tab). Logs are charted in the Well logs tab.";
   container.appendChild(note);
+}
+
+function renderGraphPanel(container, data) {
+  const reports = data.nodes.filter((n) => n.kind === "report");
+  const dataNodes = data.nodes.filter((n) => n.kind !== "report");
+  if (!reports.length) { container.appendChild(msg("No reports to graph for this well.")); return; }
+
+  container.appendChild(sectionLabel("Report ↔ data connections (click a node to focus its links)"));
+  const wrap = document.createElement("div");
+  wrap.className = "graph-wrap";
+  container.appendChild(wrap);
+
+  const W = 760, colL = 24, colR = 470, boxW = 286, boxH = 30, vgap = 12, top = 16;
+  const rows = Math.max(reports.length, dataNodes.length);
+  const H = top * 2 + rows * (boxH + vgap);
+  const svg = el("svg", { class: "graph", viewBox: `0 0 ${W} ${H}` });
+  const edgeG = el("g", {});
+  svg.appendChild(edgeG);
+
+  const yOf = (i, n) => top + i * (boxH + vgap) + ((rows - n) * (boxH + vgap)) / 2;
+  const pos = {};
+  reports.forEach((n, i) => { const y = yOf(i, reports.length); pos[n.id] = { y }; svg.appendChild(graphNode(n, colL, y, boxW, boxH, "report")); });
+  dataNodes.forEach((n, i) => { const y = yOf(i, dataNodes.length); pos[n.id] = { y }; svg.appendChild(graphNode(n, colR, y, boxW, boxH, n.kind)); });
+
+  const adj = {};
+  for (const e of data.edges) {
+    const a = pos[e.source], b = pos[e.target];
+    if (!a || !b) continue;
+    const line = el("line", { class: "gedge", x1: colL + boxW, y1: a.y + boxH / 2, x2: colR, y2: b.y + boxH / 2, "data-s": e.source, "data-t": e.target });
+    const t = el("title", {}); t.textContent = e.reason; line.appendChild(t);
+    edgeG.appendChild(line);
+    (adj[e.source] = adj[e.source] || new Set()).add(e.target);
+    (adj[e.target] = adj[e.target] || new Set()).add(e.source);
+  }
+  wrap.appendChild(svg);
+
+  const focus = (id) => {
+    const keep = new Set([id, ...(adj[id] || [])]);
+    svg.querySelectorAll(".gnode").forEach((g) => { g.classList.toggle("dim", !keep.has(g.getAttribute("data-id"))); g.classList.toggle("on", g.getAttribute("data-id") === id); });
+    edgeG.querySelectorAll(".gedge").forEach((l) => { const hit = l.getAttribute("data-s") === id || l.getAttribute("data-t") === id; l.classList.toggle("on", hit); l.classList.toggle("dim", !hit); });
+  };
+  const reset = () => svg.querySelectorAll(".gnode,.gedge").forEach((x) => x.classList.remove("dim", "on"));
+  svg.addEventListener("click", (e) => { const g = e.target.closest(".gnode"); if (g) focus(g.getAttribute("data-id")); else reset(); });
+
+  const linked = reports.filter((r) => adj[r.id]).length;
+  const note = document.createElement("p");
+  note.className = "msg";
+  note.textContent = `${reports.length} report(s), ${dataNodes.length} data file(s), ${data.edges.length} connection(s). `
+    + `${linked}/${reports.length} reports linked by depth/sample; unlinked reports are scanned or name no interval.`;
+  container.appendChild(note);
+}
+
+function graphNode(n, x, y, w, h, kind) {
+  const g = el("g", { class: `gnode gnode-${kind}` + (n.biostrat ? " gnode-biostrat" : "") });
+  g.setAttribute("data-id", n.id);
+  g.appendChild(el("rect", { x, y, width: w, height: h }));
+  const label = n.label.length > 38 ? n.label.slice(0, 36) + "…" : n.label;
+  g.appendChild(text(x + 8, y + h / 2 + 4, label, { class: "gnode-label" }));
+  const tt = el("title", {});
+  tt.textContent = n.label + (n.interval ? ` (${n.interval[0]}-${n.interval[1]} m)` : "") + (n.range ? ` (${Math.round(n.range[0])}-${Math.round(n.range[1])} m)` : "");
+  g.appendChild(tt);
+  return g;
 }
 
 function renderLogsPanel(container, data) {

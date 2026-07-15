@@ -178,6 +178,12 @@ def create_app() -> FastAPI:
     def well_logs(well_id: str, mnemonic: str = None, user: str = Depends(current_user)) -> dict:
         return {"well_id": well_id, "files": _well_logs(well_id, mnemonic)}
 
+    @app.get("/api/wells/{well_id}/graph")
+    def well_graph(well_id: str, user: str = Depends(current_user)) -> dict:
+        from . import graph
+
+        return graph.build_well_graph(_well_or_404(well_id))
+
     @app.post("/api/wells/{well_id}/ask")
     def well_ask(well_id: str, body: AskBody, user: str = Depends(current_user)) -> dict:
         from . import assistant
