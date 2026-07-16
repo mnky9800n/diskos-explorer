@@ -27,6 +27,25 @@ def base_path() -> str:
     b = os.environ.get("DISKOS_BASE_PATH", "/")
     return b if b.endswith("/") else b + "/"
 
+
+def wiki_dir() -> Path:
+    """Directory holding the built wiki markdown (DISKOS_WIKI_DIR, default 'wiki')."""
+    return Path(os.environ.get("DISKOS_WIKI_DIR", "wiki"))
+
+
+_NPD_CACHE: dict[str, dict] = {}
+
+
+def _npd_records():
+    """Cached Sodir/NPD register, to resolve a well_id to its borehole page."""
+    from ..config import load_config as _lc
+    from .. import npd as _npd
+
+    path = str(_lc().npd_path())
+    if path not in _NPD_CACHE:
+        _NPD_CACHE[path] = _npd.load_factpages(path)
+    return _NPD_CACHE[path]
+
 from pydantic import BaseModel
 
 from .. import wells as wells_mod
@@ -174,6 +193,38 @@ def create_app() -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"Assistant unavailable: {exc}")
         return {"question": body.question, "answer": answer, "stats": s}
+
+    @app.get("/api/wiki/search")
+    def wiki_search(q: str, user: str = Depends(current_user)) -> dict:
+        from ..wiki.search import search as wiki_search_fn
+
+        results = wiki_search_fn(wiki_dir(), q, top_k=10)
+        return {
+            "query": q,
+            "results": [
+                {"path": r["path"].name, "score": r["score"], "snippet": r["snippet"]}
+                for r in results
+            ],
+        }
+
+    @app.get("/api/wells/{well_id}/wiki")
+    def well_wiki(well_id: str, user: str = Depends(current_user)) -> dict:
+        from ..boreholes import borehole_id
+
+        bid = borehole_id(well_id, _npd_records())
+        page = wiki_dir() / "entities" / f"well_{bid}.md"
+        if not page.is_file():
+            return {"borehole_id": bid, "exists": False, "markdown": "", "detail": "No wiki page yet for this borehole. Run `diskos wiki build`."}
+        return {"borehole_id": bid, "exists": True, "markdown": page.read_text(encoding="utf-8")}
+
+    @app.get("/api/fields/{name}/wiki")
+    def field_wiki(name: str, user: str = Depends(current_user)) -> dict:
+        from ..wiki.ingest import field_slug
+
+        page = wiki_dir() / "entities" / f"field_{field_slug(name)}.md"
+        if not page.is_file():
+            return {"field": name, "exists": False, "markdown": "", "detail": "No wiki page yet for this field."}
+        return {"field": name, "exists": True, "markdown": page.read_text(encoding="utf-8")}
 
     @app.get("/api/wells/{well_id}")
     def well_detail(well_id: str, user: str = Depends(current_user)) -> dict:

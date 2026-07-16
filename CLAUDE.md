@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Most of the roadmap is built. The repo is a `uv`-managed Python package (`diskos`, src layout). Working and tested: palynology pipeline (parse -> reconcile -> wide CSV), human-in-the-loop name reconciliation + target suggestions, palynology plots, well-log (LAS) tracks, the model layer + deterministic wiki ingest, a FastAPI web backend with Google-OAuth/allowlist auth, and local BM25 wiki search. XRF is ported but its PyMca fit path is unverified (no wheels for this Python, no real data here). Jack's four notebooks are refactored reference under `notebooks/`. Not yet done: the web UI + real Google credentials, and qmd/local-search-agent integration. Always use `uv`, never `pip` or bare `python`.
+Most of the roadmap is built. The repo is a `uv`-managed Python package (`diskos`, src layout). Working and tested: palynology pipeline (parse -> reconcile -> wide CSV), human-in-the-loop name reconciliation + target suggestions, palynology plots, well-log (LAS) tracks, the model layer, a FastAPI web backend with live Google-OAuth/allowlist auth (deployed at johnspace.xyz/diskos-explorer), and local BM25 wiki search. The **LLM wiki over the whole archive is built** (identity resolution via the Sodir/NPD register, borehole grouping + dedup, per-borehole and per-field pages authored by local Ollama models, resumable); see "Borehole identity and the LLM wiki" below. XRF is ported but its PyMca fit path is unverified. Jack's four notebooks are refactored reference under `notebooks/`. Not yet done: OCR for scanned reports, a map view, and qmd/local-search-agent integration. Always use `uv`, never `pip` or bare `python`.
 
 ## Commands
 
@@ -20,8 +20,13 @@ uv run diskos taxa review                # similar names awaiting a same/differe
 uv run diskos taxa decide "<target>" "<variant>" same   # record a decision
 uv run diskos plot --in out/ --out out/palyno.png       # species-vs-depth figure
 uv run diskos logs --well 7_11-1 --out out/logs.png     # gamma/log tracks (LAS)
-uv run diskos wiki ingest --in out/ --wiki wiki/         # per-well CSV -> wiki pages
+uv run diskos wiki ingest --in out/ --wiki wiki/         # per-well palynology CSV -> wiki
 uv run diskos wiki search "Apectodinium" --wiki wiki/    # local BM25 search
+uv run diskos npd fetch                                  # cache the Sodir/NPD wellbore register
+uv run diskos boreholes                                  # dirs -> physical boreholes + coverage
+uv run diskos wiki build --field 31_2 --wiki wiki/       # LLM wiki over a block (pilot)
+uv run diskos wiki build --all --wiki wiki/              # whole-archive sweep (resumable)
+uv run diskos wiki build --well 1_3-10 --no-model        # one borehole, deterministic only
 DISKOS_WEB_DEV=1 uv run diskos serve     # web API (needs `web` extra)
 # Point at a sample tree without editing config:
 DISKOS_ROOT=./tests/data/diskos_sample uv run diskos stratabugs --all --out out/
@@ -45,6 +50,8 @@ The palynology pipeline (`io/stratabugs.py` parse → `palyno/reconcile.py` matc
 Name reconciliation is human-in-the-loop by design (Jack's calls): an **exact** genus+species match auto-merges (author/year ignored), but a merely **similar** name (spelling near-miss) is held apart and never silently merged. It goes to a same/different decision persisted in `taxon_decisions.csv` (`reconcile.Decisions`, path from config) and reused everywhere. The `diskos taxa review`/`decide` commands drive this from the CLI now; the web app will drive the same decision store later. Target species are not a fixed list to hand-maintain: `palyno/suggest.py` ranks candidate targets by prevalence in the selected wells (`diskos taxa suggest`) so Jack picks from what is actually there (a richer LLM-based biostrat suggestion can come with the model layer). `palyno/targets.py` holds the current default picks; `palyno/taxa.py` keeps the lower-level `fuzzy_match_taxa` helper.
 
 Model/compute access is config-driven and swappable 3 ways (lambda-scalar Ollama for serving Jack, Modal for burst GPU, a cloud Claude model for wiki authoring) via profiles in `config.toml`; secrets stay in a gitignored `.env` referenced by env-var name. The web front end (Phase 5) will gate everything behind Google OAuth + an email allowlist.
+
+**Borehole identity and the LLM wiki (the actual deliverable #1).** Above `wells.py` sits an identity + location layer that turns the flat directory catalog into physical boreholes. `npd.py` fetches the public Sodir/NPD FactPages wellbore register (cached CSVs, `diskos npd fetch`) and joins by normalizing the wellbore name to the directory form (`34/8-14 A` -> `34_8-14_A`); it supplies authoritative decimal-degree WGS84 lat/lon, field, and the parent-well↔sidetrack mapping. `boreholes.py` uses that (heuristic suffix-strip as fallback) to `group_boreholes`: it collapses sidetracks into one `BoreholeGroup`, resolves its location (NPD, else LAS header via `io/las.read_las_header` + `geo.parse_dms`), and dedupes the archive's byte-identical double-named exports. `wiki/dossier.py::build_dossier` compiles one borehole's model-free facts (identity, location, deduped inventory, log curves + gamma, report presence + studied intervals, palynology, nearest neighbours); `wiki/build.py::build_wiki` renders an IODP-style page per borehole (`wiki/ingest.render_borehole_page`) and a synthesized page per area (NPD field, else block), authored by the `wiki-well` (qwen2.5:32b) and `wiki-field` (llama3.3:70b) local profiles. The deterministic dossier is the unit of work and the page renders without a model, so a better model can re-run over the same dossiers later; per-borehole ingest is resumable via a `dossier_hash` in the page front matter. **Absence is always stated as "not in the mirror," never "does not exist"** (the mirror is a partial, growing Halliburton download). The web app surfaces pages via `/api/wells/{id}/wiki`, `/api/fields/{name}/wiki`, and `/api/wiki/search`, with a Wiki tab in the SPA.
 
 ## What this project is
 

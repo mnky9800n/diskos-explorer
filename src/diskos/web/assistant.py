@@ -43,7 +43,7 @@ def extract_report_text(paths: list[Path], max_chars: int = MAX_REPORT_CHARS) ->
 
     Files with no text layer (scans) are noted but do not consume the budget.
     """
-    from pypdf import PdfReader
+    from ..io.report import read_pdf_text
 
     chunks: list[str] = []
     used: list[str] = []
@@ -51,11 +51,7 @@ def extract_report_text(paths: list[Path], max_chars: int = MAX_REPORT_CHARS) ->
     for path in _biostrat_first(paths):
         if total >= max_chars:
             break
-        try:
-            reader = PdfReader(str(path))
-            text = "".join((pg.extract_text() or "") for pg in reader.pages).strip()
-        except Exception:
-            text = ""
+        text = read_pdf_text(path)
         if text:
             snippet = text[: max_chars - total]
             chunks.append(f"--- {path.name} ---\n{snippet}")

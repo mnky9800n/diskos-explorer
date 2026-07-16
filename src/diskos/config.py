@@ -39,10 +39,18 @@ class Config:
     profiles: dict[str, LLMProfile] = field(default_factory=dict)
     project_root: Path = Path(".")
     taxon_decisions: str = "taxon_decisions.csv"
+    npd_dir: str = "./data/npd"
 
     def decisions_path(self) -> Path:
         """Absolute path to the persistent taxon same/different decisions file."""
         path = Path(self.taxon_decisions)
+        if not path.is_absolute():
+            path = self.project_root / path
+        return path
+
+    def npd_path(self) -> Path:
+        """Absolute path to the cached Sodir/NPD FactPages CSV directory."""
+        path = Path(self.npd_dir)
         if not path.is_absolute():
             path = self.project_root / path
         return path
@@ -103,4 +111,5 @@ def load_config(path: Path | None = None) -> Config:
         profiles=profiles,
         project_root=project_root,
         taxon_decisions=paths.get("taxon_decisions", "taxon_decisions.csv"),
+        npd_dir=paths.get("npd_dir", "./data/npd"),
     )

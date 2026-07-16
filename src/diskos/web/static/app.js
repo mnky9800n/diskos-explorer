@@ -298,6 +298,7 @@ function renderWell(detail) {
 
   const id = detail.well_id;
   const tabs = [];
+  tabs.push({ label: "Wiki", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/wiki`), render: renderWikiPanel });
   tabs.push({ label: "Assistant", render: (c) => renderAssistantPanel(c, detail) });
   if (detail.counts.logs) tabs.push({ label: "Well logs", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/logs`), render: renderLogsPanel });
   if (detail.counts.geology) tabs.push({ label: "Graph", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/graph`), render: renderGraphPanel });
@@ -336,6 +337,72 @@ function buildTabs(panel, defs) {
   });
   panel.appendChild(bar);
   panels.forEach((p) => panel.appendChild(p));
+}
+
+function renderWikiPanel(container, data) {
+  if (!data.exists) {
+    container.appendChild(msg(data.detail || "No wiki page yet for this borehole."));
+    return;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "wiki";
+  renderMarkdown(wrap, data.markdown);
+  container.appendChild(wrap);
+}
+
+// Minimal, dependency-free markdown -> DOM for the known wiki page shape.
+function renderMarkdown(root, md) {
+  const lines = md.split("\n");
+  let i = 0;
+  // Skip YAML front matter.
+  if (lines[0] === "---") { i = 1; while (i < lines.length && lines[i] !== "---") i++; i++; }
+  let list = null, table = null;
+  const flush = () => { list = null; table = null; };
+  for (; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("## ")) { flush(); const h = document.createElement("h4"); h.textContent = line.slice(3); root.appendChild(h); continue; }
+    if (line.startsWith("# ")) { flush(); const h = document.createElement("h3"); h.textContent = line.slice(2); root.appendChild(h); continue; }
+    if (line.startsWith("|")) {
+      const cells = line.split("|").slice(1, -1).map((c) => c.trim());
+      if (cells.every((c) => /^-+$/.test(c))) continue; // separator row
+      if (!table) { table = document.createElement("table"); table.className = "wiki-table"; root.appendChild(table); }
+      const tr = document.createElement("tr");
+      cells.forEach((c) => { const td = document.createElement(table.rows.length ? "td" : "th"); inlineInto(td, c); tr.appendChild(td); });
+      table.appendChild(tr);
+      continue;
+    }
+    if (line.startsWith("- ")) {
+      if (!list) { list = document.createElement("ul"); list.className = "wiki-list"; root.appendChild(list); }
+      const li = document.createElement("li"); inlineInto(li, line.slice(2)); list.appendChild(li);
+      continue;
+    }
+    if (line.trim() === "") { flush(); continue; }
+    flush();
+    const p = document.createElement("p"); inlineInto(p, line); root.appendChild(p);
+  }
+}
+
+// Inline: **bold**, `code`, and [[wikilinks]] (well_/field_ links are clickable).
+function inlineInto(el, text) {
+  const re = /\[\[([^\]]+)\]\]|\*\*([^*]+)\*\*|`([^`]+)`/g;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+    if (m[1] != null) {
+      const target = m[1];
+      const wellMatch = target.match(/^well_(.+)$/);
+      if (wellMatch) {
+        const a = document.createElement("a"); a.href = "#"; a.className = "wikilink"; a.textContent = wellMatch[1];
+        a.addEventListener("click", (e) => { e.preventDefault(); selectWell(wellMatch[1]); });
+        el.appendChild(a);
+      } else {
+        const s = document.createElement("span"); s.className = "wikilink"; s.textContent = target.replace(/^field_/, ""); el.appendChild(s);
+      }
+    } else if (m[2] != null) { const b = document.createElement("strong"); b.textContent = m[2]; el.appendChild(b); }
+    else { const c = document.createElement("code"); c.textContent = m[3]; el.appendChild(c); }
+    last = re.lastIndex;
+  }
+  if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
 }
 
 function suggestionsFor(counts) {

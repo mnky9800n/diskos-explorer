@@ -35,6 +35,8 @@ taxa_app = typer.Typer(help="Target species: suggest, review similar names, reco
 app.add_typer(taxa_app, name="taxa")
 wiki_app = typer.Typer(help="Wiki: ingest pipeline artifacts into the knowledge base.", no_args_is_help=True)
 app.add_typer(wiki_app, name="wiki")
+npd_app = typer.Typer(help="NPD/Sodir FactPages: fetch the authoritative wellbore register.", no_args_is_help=True)
+app.add_typer(npd_app, name="npd")
 
 CURATED_DEFAULT = Path("data/palynology")
 
@@ -308,6 +310,101 @@ def wiki_search(
         typer.echo(f"  {r['score']:>7}  {r['path']}")
         if r["snippet"]:
             typer.echo(f"           {r['snippet']}")
+
+
+@npd_app.command("fetch")
+def npd_fetch() -> None:
+    """Download the Sodir/NPD FactPages wellbore CSVs into the cached npd dir."""
+    from . import npd as npd_mod
+
+    cfg = load_config()
+    dest = cfg.npd_path()
+    typer.echo(f"Fetching Sodir FactPages wellbore tables into {dest} ...")
+    written = npd_mod.fetch_factpages(dest)
+    if not written:
+        typer.echo("No tables downloaded (network or endpoint issue).", err=True)
+        raise typer.Exit(code=1)
+    records = npd_mod.load_factpages(dest)
+    for path in written:
+        typer.echo(f"  {path.name}")
+    typer.echo(f"\n{len(records)} wellbore records available from {len(written)} table(s).")
+
+
+@app.command()
+def boreholes(
+    limit: int = typer.Option(40, "--limit", help="How many groups to print."),
+) -> None:
+    """Resolve directories into physical boreholes and report coverage."""
+    from . import npd as npd_mod
+    from .boreholes import borehole_id, quadrant_block
+
+    cfg = load_config()
+    root = diskos_root(cfg)
+    records = npd_mod.load_factpages(cfg.npd_path())
+    ids = wells_mod.list_well_ids(root)
+
+    groups: dict[str, list[str]] = {}
+    for wid in ids:
+        groups.setdefault(borehole_id(wid, records), []).append(wid)
+
+    n = len(groups)
+    with_coords = sum(1 for b in groups if (m := npd_mod.match(records, b)) and m.lat is not None)
+    with_field = sum(1 for b in groups if (m := npd_mod.match(records, b)) and m.field)
+    multi = sum(1 for v in groups.values() if len(v) > 1)
+    pct = lambda x: f"{100 * x // n}%" if n else "0%"
+
+    typer.echo(f"{len(ids)} directories -> {n} boreholes ({multi} with sidetracks)")
+    typer.echo(f"NPD register loaded: {len(records)} wellbores")
+    typer.echo(f"  with coordinates: {with_coords} ({pct(with_coords)})")
+    typer.echo(f"  with field:       {with_field} ({pct(with_field)})\n")
+    for bid, members in sorted(groups.items())[:limit]:
+        extra = f"  <- {members}" if len(members) > 1 else ""
+        typer.echo(f"  {bid}{extra}")
+
+
+@wiki_app.command("build")
+def wiki_build(
+    field: str = typer.Option(None, "--field", help="Build one field or block, e.g. 31_2."),
+    well: str = typer.Option(None, "--well", help="Build one borehole by ID."),
+    all_wells: bool = typer.Option(False, "--all", help="Build the whole archive."),
+    wiki_dir: Path = typer.Option(Path("wiki"), "--wiki", help="Wiki directory to write."),
+    out_dir: Path = typer.Option(Path("out"), "--out", help="Per-well palynology CSVs, if any."),
+    no_model: bool = typer.Option(False, "--no-model", help="Deterministic pages only (no LLM)."),
+    force: bool = typer.Option(False, "--force", help="Rewrite pages even if unchanged."),
+) -> None:
+    """Build borehole + field wiki pages from the archive (NPD-located, deduped)."""
+    from .llm.client import LLMClient
+    from .wiki.build import build_wiki
+
+    cfg = load_config()
+    root = diskos_root(cfg)
+
+    if well:
+        scope: tuple[str, str] | str = ("well", well)
+    elif field:
+        scope = ("field", field)
+    elif all_wells:
+        scope = "all"
+    else:
+        typer.echo("Specify --field <block/field>, --well <id>, or --all.", err=True)
+        raise typer.Exit(code=1)
+
+    well_client = field_client = None
+    if not no_model:
+        well_client = LLMClient.from_profile("wiki-well", cfg)
+        field_client = LLMClient.from_profile("wiki-field", cfg)
+
+    typer.echo(f"Building wiki (scope={scope}) into {wiki_dir} ...")
+    summary = build_wiki(
+        root, wiki_dir, scope,
+        well_client=well_client, field_client=field_client,
+        out_dir=out_dir if out_dir.is_dir() else None,
+        npd_dir=cfg.npd_path(), force=force,
+    )
+    typer.echo(
+        f"\n{summary['boreholes']} boreholes: {summary['pages_written']} written, "
+        f"{summary['pages_skipped']} unchanged; {summary['areas']} field pages."
+    )
 
 
 if __name__ == "__main__":

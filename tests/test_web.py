@@ -45,9 +45,9 @@ def test_unknown_well_404(client):
 
 def test_corpus_stats_endpoint(client):
     d = client.get("/api/corpus").json()
-    assert d["n_wells"] == 3
+    assert d["n_wells"] == 4
     assert d["biostrat"] == 1
-    assert d["coverage"].get("logs") == 1
+    assert d["coverage"].get("logs") == 2
 
 
 def test_corpus_find_endpoint(client):
@@ -140,6 +140,41 @@ def test_allowlist_blocks_non_listed_user(monkeypatch):
     # An allowlisted user (via dev header) gets through.
     ok = c.get("/api/wells", headers={"X-Dev-User": "someone@else.com"})
     assert ok.status_code == 200
+
+
+def test_wiki_endpoints_serve_built_pages(monkeypatch, tmp_path):
+    from diskos.wiki.build import build_wiki
+
+    NPD_SAMPLE = Path(__file__).parent / "data" / "npd_sample"
+    build_wiki(SAMPLE_ROOT, tmp_path, scope="all", npd_dir=NPD_SAMPLE)
+
+    monkeypatch.setenv("DISKOS_WEB_DEV", "1")
+    monkeypatch.setenv("DISKOS_ROOT", str(SAMPLE_ROOT))
+    monkeypatch.setenv("DISKOS_WIKI_DIR", str(tmp_path))
+    monkeypatch.delenv("DISKOS_ALLOWLIST", raising=False)
+    from diskos.web.api import create_app
+
+    c = TestClient(create_app())
+
+    # A borehole page (sidetrack resolves to the parent's page).
+    w = c.get("/api/wells/7_11-1_A/wiki").json()
+    assert w["borehole_id"] == "7_11-1"
+    assert w["exists"] is True
+    assert "# Borehole 7_11-1" in w["markdown"]
+
+    # A field page.
+    f = c.get("/api/fields/SLEIPNER/wiki").json()
+    assert f["exists"] is True
+    assert "SLEIPNER" in f["markdown"]
+
+    # BM25 search over the built pages.
+    s = c.get("/api/wiki/search", params={"q": "gamma logs"}).json()
+    assert s["results"]
+    assert any("well_" in r["path"] for r in s["results"])
+
+    # A borehole with no page yet degrades gracefully, not a 500.
+    missing = c.get("/api/wells/99_9-9/wiki").json()
+    assert missing["exists"] is False
 
 
 def test_oauth_login_does_not_treat_request_as_query_param(monkeypatch):
