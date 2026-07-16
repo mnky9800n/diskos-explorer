@@ -231,11 +231,14 @@ def render_borehole_page(dossier: dict, on_date: str, prose: str = "") -> str:
     if dossier["reports"]:
         for rep in dossier["reports"]:
             tag = "biostrat" if rep["biostrat"] else "report"
-            note = ""
+            bits = []
+            if rep.get("source") == "ocr":
+                bits.append("OCR")
             if rep.get("interval"):
-                note = f" (studied {rep['interval'][0]:.0f}-{rep['interval'][1]:.0f} m)"
+                bits.append(f"studied {rep['interval'][0]:.0f}-{rep['interval'][1]:.0f} m")
             elif not rep.get("has_text"):
-                note = " (scanned, no extractable text)"
+                bits.append("scanned, no extractable text")
+            note = f" ({'; '.join(bits)})" if bits else ""
             lines.append(f"- [{tag}] {rep['file']}{note}")
     else:
         lines.append("No report in the local mirror.")

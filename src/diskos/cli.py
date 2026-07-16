@@ -399,11 +399,68 @@ def wiki_build(
         root, wiki_dir, scope,
         well_client=well_client, field_client=field_client,
         out_dir=out_dir if out_dir.is_dir() else None,
-        npd_dir=cfg.npd_path(), force=force,
+        npd_dir=cfg.npd_path(), ocr_dir=cfg.ocr_path(), force=force,
     )
     typer.echo(
         f"\n{summary['boreholes']} boreholes: {summary['pages_written']} written, "
         f"{summary['pages_skipped']} unchanged; {summary['areas']} field pages."
+    )
+
+
+@app.command()
+def ocr(
+    biostrat: bool = typer.Option(False, "--biostrat", help="Only biostratigraphy reports."),
+    field: str = typer.Option(None, "--field", help="Limit to one field/block, e.g. 31_2."),
+    limit: int = typer.Option(0, "--limit", help="Cap how many PDFs to OCR (0 = no cap)."),
+    max_pages: int = typer.Option(12, "--max-pages", help="Pages to OCR per report."),
+    force: bool = typer.Option(False, "--force", help="Re-OCR even if cached."),
+) -> None:
+    """OCR scanned report PDFs with the local vision model, caching transcripts.
+
+    Skips reports that already have a text layer or a cached transcript. Then
+    re-run `diskos wiki build` so the pages that gained text regenerate.
+    """
+    from . import npd as npd_mod
+    from . import wells as wells_mod
+    from .boreholes import group_boreholes, quadrant_block
+    from .io.ocr import ocr_reports
+    from .llm.client import LLMClient
+
+    cfg = load_config()
+    root = diskos_root(cfg)
+    records = npd_mod.load_factpages(cfg.npd_path())
+
+    well_ids = wells_mod.list_well_ids(root)
+    if field:
+        well_ids = [w for w in well_ids if quadrant_block(w)[1] == field]
+    catalog = {w: wells_mod.well_files(root, w) for w in well_ids}
+    groups = group_boreholes(catalog, records)
+
+    pdfs: list[Path] = []
+    for group in groups.values():
+        for p in group.files.get("geology", []):
+            if p.suffix.lower() != ".pdf":
+                continue
+            if biostrat and not wells_mod.is_biostrat(p):
+                continue
+            pdfs.append(p)
+    if limit:
+        pdfs = pdfs[:limit]
+
+    client = LLMClient.from_profile("vision", cfg)
+    typer.echo(f"OCR over {len(pdfs)} report PDF(s) with the vision model ...")
+    done = {"ocr": 0, "cached": 0, "has-text": 0, "empty": 0}
+
+    def report(status: dict) -> None:
+        done[status["state"]] = done.get(status["state"], 0) + 1
+        if status["state"] == "ocr":
+            typer.echo(f"  {status['file']}  ({status['chars']} chars)")
+
+    ocr_reports(pdfs, client, cfg.ocr_path(), max_pages=max_pages, force=force, on_each=report)
+    typer.echo(
+        f"\nOCR done: {done['ocr']} transcribed, {done['cached']} cached, "
+        f"{done['has-text']} already had text, {done['empty']} empty. "
+        f"Now run `diskos wiki build --all` to enrich pages."
     )
 
 

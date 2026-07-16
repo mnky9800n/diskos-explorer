@@ -66,6 +66,7 @@ def build_wiki(
     field_client=None,
     out_dir: str | Path | None = None,
     npd_dir: str | Path | None = None,
+    ocr_dir: str | Path | None = None,
     force: bool = False,
     on_date: str | None = None,
 ) -> dict:
@@ -83,7 +84,7 @@ def build_wiki(
     dossiers: list[dict] = []
     written = skipped = 0
     for group in groups.values():
-        dossier = build_dossier(group, all_groups=groups, out_dir=out_dir)
+        dossier = build_dossier(group, all_groups=groups, out_dir=out_dir, ocr_dir=ocr_dir)
         dossiers.append(dossier)
         path = ingest_borehole(dossier, wiki_dir, on_date, client=well_client, force=force)
         if path is None:

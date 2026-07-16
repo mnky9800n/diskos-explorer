@@ -14,6 +14,8 @@ prefer = "diskos_root"
 taxon_decisions = "taxon_decisions.csv"
 # Cached Sodir/NPD FactPages wellbore CSVs (gitignored; populated by `diskos npd fetch`).
 npd_dir = "./data/npd"
+# Cached OCR transcripts of scanned reports (gitignored; populated by `diskos ocr`).
+ocr_dir = "./data/ocr"
 
 [llm]
 # Cheap, always-on local model unless a caller explicitly asks for another profile.
