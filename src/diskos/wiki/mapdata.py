@@ -38,6 +38,13 @@ def _point(text: str) -> dict | None:
         latf, lonf = float(lat), float(lon)
     except ValueError:
         return None
+    # Guard against garbage coordinates already written into older pages
+    # (LAS null sentinels, UTM, wrong hemisphere) so one outlier cannot blow up
+    # the map's bounds.
+    from ..geo import in_norwegian_shelf
+
+    if not in_norwegian_shelf(latf, lonf):
+        return None
     return {
         "borehole_id": fm.get("borehole_id", ""),
         "lat": latf,
