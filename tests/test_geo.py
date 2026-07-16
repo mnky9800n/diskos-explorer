@@ -20,3 +20,20 @@ def test_parse_dms_empty():
     assert parse_dms("") is None
     assert parse_dms(None) is None
     assert parse_dms("N/A") is None
+
+
+def test_parse_dms_rejects_non_coordinates():
+    # LAS null sentinels and UTM easting/northing must not parse as degrees.
+    assert parse_dms("-98765") is None
+    assert parse_dms("-999.25") is None
+    assert parse_dms("6738756.98") is None
+    assert parse_dms("494437.07") is None
+
+
+def test_in_norwegian_shelf():
+    from diskos.geo import in_norwegian_shelf
+
+    assert in_norwegian_shelf(58.3, 1.9) is True   # a real North Sea well
+    assert in_norwegian_shelf(-58.8, -2.2) is False  # wrong hemisphere
+    assert in_norwegian_shelf(0, 0) is False
+    assert in_norwegian_shelf(None, 2.0) is False

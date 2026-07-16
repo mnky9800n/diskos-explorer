@@ -28,3 +28,18 @@ def test_map_points_reads_located_boreholes(tmp_path):
 
 def test_map_points_empty_when_no_wiki(tmp_path):
     assert map_points(tmp_path) == []
+
+
+def test_map_points_drops_garbage_coordinates(tmp_path):
+    # A page written before the coordinate guard, with a UTM/null outlier, must
+    # not appear on the map (one outlier would blow up the map's bounds).
+    entities = tmp_path / "entities"
+    entities.mkdir(parents=True)
+    (entities / "well_good.md").write_text(
+        "---\ntype: borehole\nborehole_id: 7_11-1\nlat: 58.3\nlon: 1.9\n---\n# ok\n"
+    )
+    (entities / "well_bad.md").write_text(
+        "---\ntype: borehole\nborehole_id: 99_9-9\nlat: 6738756.98\nlon: 494437.07\n---\n# junk\n"
+    )
+    ids = [p["borehole_id"] for p in map_points(tmp_path)]
+    assert ids == ["7_11-1"]

@@ -172,7 +172,7 @@ def _resolve_location(group: BoreholeGroup, records: dict[str, "npd_mod.NpdRecor
         return
 
     # Fallback: read the location out of a member's LAS header.
-    from .geo import parse_dms
+    from .geo import in_norwegian_shelf, parse_dms
     from .io.las import read_las_header
 
     for well in group.wells:
@@ -182,7 +182,9 @@ def _resolve_location(group: BoreholeGroup, records: dict[str, "npd_mod.NpdRecor
                 continue
             lat = parse_dms(header.get("lat_dms"))
             lon = parse_dms(header.get("lon_dms"))
-            if lat is not None and lon is not None:
+            # Only trust a LAS coordinate that lands on the shelf: many headers
+            # hold null sentinels, UTM, or wrong-hemisphere values.
+            if in_norwegian_shelf(lat, lon):
                 group.lat, group.lon = lat, lon
                 group.field_name = group.field_name or header.get("field")
                 group.coord_source = "las"

@@ -36,9 +36,25 @@ def parse_dms(value: str | None) -> float | None:
     minutes = nums[1] if len(nums) > 1 else 0.0
     seconds = nums[2] if len(nums) > 2 else 0.0
     decimal = abs(deg) + minutes / 60.0 + seconds / 3600.0
+    # Reject non-coordinate junk seen in LAS headers: null sentinels (-98765,
+    # -999.25) and UTM easting/northing stored in the LATI/LONG fields. No real
+    # latitude or longitude exceeds 180 degrees.
+    if decimal > 180.0:
+        return None
     upper = text.upper()
     sign = -1.0 if ("S" in upper or "W" in upper or text.lstrip().startswith("-")) else 1.0
     return sign * decimal
+
+
+def in_norwegian_shelf(lat: float | None, lon: float | None) -> bool:
+    """Whether a coordinate falls on the Norwegian/Danish continental shelf.
+
+    Every well in this archive is there, so a coordinate outside this box is a
+    parsing error (wrong hemisphere, UTM, null) rather than a real location.
+    """
+    if lat is None or lon is None:
+        return False
+    return 50.0 <= lat <= 83.0 and -20.0 <= lon <= 45.0
 
 
 def utm_to_wgs84(
