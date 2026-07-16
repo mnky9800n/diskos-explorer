@@ -114,9 +114,13 @@ function renderMapPanel(container, data) {
     marker.addTo(map);
     bounds.push([p.lat, p.lon]);
   }
-  if (bounds.length) map.fitBounds(bounds, { padding: [24, 24] });
-  // The panel was hidden while loading; Leaflet must recompute its size once shown.
-  setTimeout(() => map.invalidateSize(), 0);
+  // The container was just inserted, so its size is not laid out yet. Recompute
+  // the size first, THEN fit the bounds, otherwise fitBounds zooms against a
+  // zero-size box and lands on an empty patch with every marker off-screen.
+  setTimeout(() => {
+    map.invalidateSize();
+    if (bounds.length) map.fitBounds(bounds, { padding: [24, 24] });
+  }, 0);
 }
 
 function showWorkflow() {
