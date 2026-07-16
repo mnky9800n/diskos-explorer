@@ -18,6 +18,7 @@ const fetchJSON = (url) => fetch(apiUrl(url), { credentials: "include" }).then((
 
 let WELLS = [];
 let ACTIVE = null;
+let MAP = null; // live Leaflet map, torn down when leaving the Map view
 
 init();
 
@@ -54,12 +55,73 @@ async function loadWells() {
   renderRail("");
   setStatus("Ready", `${WELLS.length} wells`);
   $("#filter").addEventListener("input", (e) => renderRail(e.target.value.trim().toLowerCase()));
+  $("#mapbtn").addEventListener("click", showMap);
   $("#corpusbtn").addEventListener("click", showCorpus);
   $("#workflowbtn").addEventListener("click", showWorkflow);
 }
 
+// Tear down the Leaflet map before switching views (frees its window listeners).
+function clearMap() {
+  if (MAP) { MAP.remove(); MAP = null; }
+}
+
+async function showMap() {
+  ACTIVE = null;
+  clearMap();
+  renderRail($("#filter").value.trim().toLowerCase());
+  $("#empty").hidden = true;
+  const panel = $("#well");
+  panel.hidden = false;
+  panel.scrollTop = 0;
+  panel.replaceChildren(loadingMsg());
+  try {
+    renderMapPanel(panel, await fetchJSON("/api/map"));
+  } catch (e) {
+    panel.replaceChildren(errorMsg("Could not load the map."));
+  }
+}
+
+function renderMapPanel(container, data) {
+  container.replaceChildren();
+  setStatus("Map", `${data.count} located boreholes`);
+  const head = document.createElement("div");
+  head.className = "well-head";
+  head.innerHTML = `<h2>Borehole map</h2><span class="well-sub">${data.count} located boreholes &middot; orange marks a biostrat report</span>`;
+  container.appendChild(head);
+
+  const mapEl = document.createElement("div");
+  mapEl.className = "borehole-map";
+  container.appendChild(mapEl);
+
+  const map = L.map(mapEl, { preferCanvas: true }).setView([60, 3], 5);
+  MAP = map;
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+    subdomains: "abcd", maxZoom: 18,
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  }).addTo(map);
+
+  const bounds = [];
+  for (const p of data.points) {
+    const bio = p.biostrat;
+    const marker = L.circleMarker([p.lat, p.lon], {
+      radius: bio ? 5 : 3.5, weight: 1,
+      color: bio ? "#a5480a" : "#12305e",
+      fillColor: bio ? "#ff8c1a" : "#3a7bd5", fillOpacity: 0.85,
+    });
+    const field = p.field ? " · " + p.field : "";
+    marker.bindTooltip(`${p.borehole_id}${field}`, { direction: "top" });
+    marker.on("click", () => selectWell(p.borehole_id));
+    marker.addTo(map);
+    bounds.push([p.lat, p.lon]);
+  }
+  if (bounds.length) map.fitBounds(bounds, { padding: [24, 24] });
+  // The panel was hidden while loading; Leaflet must recompute its size once shown.
+  setTimeout(() => map.invalidateSize(), 0);
+}
+
 function showWorkflow() {
   ACTIVE = null;
+  clearMap();
   renderRail($("#filter").value.trim().toLowerCase());
   $("#empty").hidden = true;
   const panel = $("#well");
@@ -143,6 +205,7 @@ function tag(t) { const s = document.createElement("span"); s.className = "wf-ta
 
 async function showCorpus() {
   ACTIVE = null;
+  clearMap();
   renderRail($("#filter").value.trim().toLowerCase());
   $("#empty").hidden = true;
   const panel = $("#well");
@@ -268,6 +331,7 @@ function renderRail(filter) {
 // ---------- well detail ----------
 async function selectWell(id, keepScroll) {
   ACTIVE = id;
+  clearMap();
   renderRail($("#filter").value.trim().toLowerCase());
   $("#empty").hidden = true;
   const panel = $("#well");

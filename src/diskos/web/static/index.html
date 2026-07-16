@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <base href="__BASE__" />
   <title>DISKOS Explorer</title>
+  <link rel="stylesheet" href="static/vendor/leaflet/leaflet.css" />
   <link rel="stylesheet" href="static/styles.css" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23c0c0c0'/%3E%3Crect x='1' y='1' width='14' height='4' fill='%23000080'/%3E%3C/svg%3E" />
 </head>
@@ -54,6 +55,7 @@
       <div class="window-body">
         <aside class="rail window sunk">
           <div class="rail-head">
+            <button id="mapbtn" class="btn corpus-btn">Map</button>
             <button id="corpusbtn" class="btn corpus-btn">Corpus overview</button>
             <button id="workflowbtn" class="btn corpus-btn">Workflow</button>
             <label class="rail-label" for="filter">Wells</label>
@@ -79,6 +81,7 @@
   </div>
 
   <script>window.API_BASE = "__API_BASE__";</script>
+  <script src="static/vendor/leaflet/leaflet.js"></script>
   <script src="static/app.js"></script>
 </body>
 </html>

@@ -40,6 +40,7 @@ jobs:
           cp "$src/index.html" _site/index.html
           cp "$src/404.html" _site/404.html
           cp "$src/styles.css" "$src/app.js" _site/static/
+          cp -r "$src/vendor" _site/static/vendor
           sed -i "s#__BASE__#${BASE_PATH}#g; s#__API_BASE__#${API_BASE}#g" _site/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
