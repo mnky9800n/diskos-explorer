@@ -40,6 +40,7 @@ class Config:
     project_root: Path = Path(".")
     taxon_decisions: str = "taxon_decisions.csv"
     npd_dir: str = "./data/npd"
+    ocr_dir: str = "./data/ocr"
 
     def decisions_path(self) -> Path:
         """Absolute path to the persistent taxon same/different decisions file."""
@@ -51,6 +52,13 @@ class Config:
     def npd_path(self) -> Path:
         """Absolute path to the cached Sodir/NPD FactPages CSV directory."""
         path = Path(self.npd_dir)
+        if not path.is_absolute():
+            path = self.project_root / path
+        return path
+
+    def ocr_path(self) -> Path:
+        """Absolute path to the cached OCR-transcript directory."""
+        path = Path(self.ocr_dir)
         if not path.is_absolute():
             path = self.project_root / path
         return path
@@ -112,4 +120,5 @@ def load_config(path: Path | None = None) -> Config:
         project_root=project_root,
         taxon_decisions=paths.get("taxon_decisions", "taxon_decisions.csv"),
         npd_dir=paths.get("npd_dir", "./data/npd"),
+        ocr_dir=paths.get("ocr_dir", "./data/ocr"),
     )

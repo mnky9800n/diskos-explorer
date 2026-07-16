@@ -56,7 +56,8 @@ def _log_facts(group: BoreholeGroup) -> list[dict]:
     return facts
 
 
-def _report_facts(group: BoreholeGroup) -> tuple[list[dict], str]:
+def _report_facts(group: BoreholeGroup, ocr_dir=None) -> tuple[list[dict], str]:
+    from ..io.ocr import cached_ocr
     from ..io.report import depth_interval, read_pdf_text
 
     reports = [p for p in group.files.get("geology", []) if p.suffix.lower() == ".pdf"]
@@ -67,10 +68,16 @@ def _report_facts(group: BoreholeGroup) -> tuple[list[dict], str]:
     budget = _REPORT_EXCERPT_CHARS
     for path in reports[:_MAX_REPORTS]:
         text = read_pdf_text(path, max_pages=8)
+        source = "text" if text else ""
+        if not text:  # scanned: fall back to a cached OCR transcript, if any
+            ocr = cached_ocr(path, ocr_dir)
+            if ocr:
+                text, source = ocr, "ocr"
         facts.append({
             "file": path.name,
             "biostrat": wells_mod.is_biostrat(path),
             "has_text": bool(text),
+            "source": source,
             "interval": depth_interval(text) if text else None,
         })
         if text and budget > 0:
@@ -128,9 +135,10 @@ def build_dossier(
     group: BoreholeGroup,
     all_groups: dict[str, BoreholeGroup] | None = None,
     out_dir: Path | None = None,
+    ocr_dir: Path | None = None,
 ) -> dict:
     """Assemble the structured facts for one borehole. Model-free and deterministic."""
-    reports, report_excerpt = _report_facts(group)
+    reports, report_excerpt = _report_facts(group, ocr_dir)
     npd = group.npd
     return {
         "borehole_id": group.borehole_id,
