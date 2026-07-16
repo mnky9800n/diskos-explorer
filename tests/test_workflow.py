@@ -29,3 +29,20 @@ def test_run_rejects_unknown_kind():
         assert False, "expected ValueError"
     except ValueError:
         pass
+
+
+def test_compare_logs_multi_well():
+    a = wells.well_files(SAMPLE_ROOT, "7_11-1")
+    b = wells.well_files(SAMPLE_ROOT, "7_11-1_A")
+    out = workflow.compare_logs([a, b], "GR")
+    assert out["curve"] == "GR"
+    assert set(out["used"]) == {"7_11-1", "7_11-1_A"}
+    assert out["image"].startswith("data:image/png;base64,")
+
+
+def test_compare_logs_skips_wells_without_curve():
+    a = wells.well_files(SAMPLE_ROOT, "7_11-1")
+    b = wells.well_files(SAMPLE_ROOT, "35_9-1")  # no logs
+    out = workflow.compare_logs([a, b], "GR")
+    assert out["used"] == ["7_11-1"]
+    assert out["skipped"] == ["35_9-1"]

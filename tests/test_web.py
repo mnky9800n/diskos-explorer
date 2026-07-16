@@ -142,6 +142,22 @@ def test_allowlist_blocks_non_listed_user(monkeypatch):
     assert ok.status_code == 200
 
 
+def test_compare_endpoint_multi_well(client):
+    r = client.get("/api/compare", params={"wells": "7_11-1,7_11-1_A", "mnemonic": "GR"})
+    assert r.status_code == 200
+    d = r.json()
+    assert set(d["used"]) == {"7_11-1", "7_11-1_A"}
+    assert d["image"].startswith("data:image/png;base64,")
+
+
+def test_compare_endpoint_reports_missing(client):
+    r = client.get("/api/compare", params={"wells": "7_11-1,nope_9-9"})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["used"] == ["7_11-1"]
+    assert d["missing"] == ["nope_9-9"]
+
+
 def test_wiki_endpoints_serve_built_pages(monkeypatch, tmp_path):
     from diskos.wiki.build import build_wiki
 
