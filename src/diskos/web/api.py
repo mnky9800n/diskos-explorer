@@ -34,6 +34,7 @@ def wiki_dir() -> Path:
 
 
 _NPD_CACHE: dict[str, dict] = {}
+_MAP_CACHE: dict[str, list] = {}
 
 
 def _npd_records():
@@ -193,6 +194,16 @@ def create_app() -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"Assistant unavailable: {exc}")
         return {"question": body.question, "answer": answer, "stats": s}
+
+    @app.get("/api/map")
+    def wells_map(user: str = Depends(current_user)) -> dict:
+        from ..wiki.mapdata import map_points
+
+        key = str(wiki_dir())
+        if key not in _MAP_CACHE:
+            _MAP_CACHE[key] = map_points(wiki_dir())
+        points = _MAP_CACHE[key]
+        return {"count": len(points), "points": points}
 
     @app.get("/api/wiki/search")
     def wiki_search(q: str, user: str = Depends(current_user)) -> dict:

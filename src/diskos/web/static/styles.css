@@ -270,3 +270,11 @@ svg.depthchart { display: block; width: 100%; height: auto; background: #fff; }
 .wiki-table th { background: var(--face); }
 .wikilink { color: #000080; text-decoration: underline; cursor: pointer; }
 a.wikilink:hover { color: #1084d0; }
+
+/* Corpus borehole map (Leaflet) */
+.borehole-map {
+  height: 68vh; min-height: 420px; width: 100%; margin-top: 6px;
+  box-shadow: inset -1px -1px #fff, inset 1px 1px #808080, inset -2px -2px #dfdfdf, inset 2px 2px #0a0a0a;
+}
+.borehole-map .leaflet-container { background: #aad3df; font-family: var(--sans); }
+.leaflet-tooltip { font-family: var(--sans); font-size: 11px; }

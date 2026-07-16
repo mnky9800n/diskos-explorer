@@ -172,6 +172,11 @@ def test_wiki_endpoints_serve_built_pages(monkeypatch, tmp_path):
     assert s["results"]
     assert any("well_" in r["path"] for r in s["results"])
 
+    # Map points for the located boreholes.
+    m = c.get("/api/map").json()
+    assert m["count"] >= 3
+    assert any(p["borehole_id"] == "7_11-1" and p["field"] == "SLEIPNER" for p in m["points"])
+
     # A borehole with no page yet degrades gracefully, not a 500.
     missing = c.get("/api/wells/99_9-9/wiki").json()
     assert missing["exists"] is False
