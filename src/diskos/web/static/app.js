@@ -19,6 +19,7 @@ const fetchJSON = (url) => fetch(apiUrl(url), { credentials: "include" }).then((
 let WELLS = [];
 let ACTIVE = null;
 let MAP = null; // live Leaflet map, torn down when leaving the Map view
+let MAP_VIEW = null; // remembered {center, zoom} so returning to the map keeps your place
 
 init();
 
@@ -60,9 +61,14 @@ async function loadWells() {
   $("#workflowbtn").addEventListener("click", showWorkflow);
 }
 
-// Tear down the Leaflet map before switching views (frees its window listeners).
+// Tear down the Leaflet map before switching views (frees its window listeners),
+// remembering where you were so returning to the map keeps that pan/zoom.
 function clearMap() {
-  if (MAP) { MAP.remove(); MAP = null; }
+  if (MAP) {
+    try { MAP_VIEW = { center: MAP.getCenter(), zoom: MAP.getZoom() }; } catch (e) { /* not ready */ }
+    MAP.remove();
+    MAP = null;
+  }
 }
 
 async function showMap() {
@@ -119,7 +125,11 @@ function renderMapPanel(container, data) {
   // zero-size box and lands on an empty patch with every marker off-screen.
   setTimeout(() => {
     map.invalidateSize();
-    if (bounds.length) map.fitBounds(bounds, { padding: [24, 24] });
+    if (MAP_VIEW) {
+      map.setView(MAP_VIEW.center, MAP_VIEW.zoom); // restore where you were
+    } else if (bounds.length) {
+      map.fitBounds(bounds, { padding: [24, 24] });
+    }
   }, 0);
 }
 
