@@ -23,6 +23,7 @@ from ..boreholes import BoreholeGroup
 _MAX_LOGS = 4
 _MAX_REPORTS = 6
 _REPORT_EXCERPT_CHARS = 1800
+_BIOSTRAT_TEXT_CHARS = 6000
 _MAX_NEIGHBORS = 5
 
 
@@ -65,7 +66,9 @@ def _report_facts(group: BoreholeGroup, ocr_dir=None) -> tuple[list[dict], str]:
 
     facts: list[dict] = []
     excerpt_parts: list[str] = []
+    biostrat_parts: list[str] = []
     budget = _REPORT_EXCERPT_CHARS
+    bio_budget = _BIOSTRAT_TEXT_CHARS
     for path in reports[:_MAX_REPORTS]:
         text = read_pdf_text(path, max_pages=8)
         source = "text" if text else ""
@@ -84,7 +87,14 @@ def _report_facts(group: BoreholeGroup, ocr_dir=None) -> tuple[list[dict], str]:
             take = text[:budget]
             excerpt_parts.append(f"--- {path.name} ---\n{take}")
             budget -= len(take)
-    return facts, "\n\n".join(excerpt_parts)
+        # Keep the biostrat report text in full-ish so it is readable + searchable
+        # on the page, not just fed to the model.
+        if text and wells_mod.is_biostrat(path) and bio_budget > 0:
+            take = text[:bio_budget]
+            tag = " (OCR)" if source == "ocr" else ""
+            biostrat_parts.append(f"From `{path.name}`{tag}:\n\n{take}")
+            bio_budget -= len(take)
+    return facts, "\n\n".join(excerpt_parts), "\n\n".join(biostrat_parts)
 
 
 def _palyno_facts(group: BoreholeGroup, out_dir: Path | None) -> dict | None:
@@ -138,9 +148,9 @@ def build_dossier(
     ocr_dir: Path | None = None,
 ) -> dict:
     """Assemble the structured facts for one borehole. Model-free and deterministic."""
-    reports, report_excerpt = _report_facts(group, ocr_dir)
+    reports, report_excerpt, biostrat_text = _report_facts(group, ocr_dir)
     npd = group.npd
-    return {
+    dossier = {
         "borehole_id": group.borehole_id,
         "well_ids": group.well_ids,
         "sidetracks": group.sidetracks,
@@ -176,3 +186,8 @@ def build_dossier(
         "palynology": _palyno_facts(group, out_dir),
         "neighbors": _neighbors(group, all_groups),
     }
+    # Only add the key when present, so non-biostrat pages keep their hash (and
+    # are not needlessly regenerated on re-ingest).
+    if biostrat_text:
+        dossier["biostrat_text"] = biostrat_text
+    return dossier

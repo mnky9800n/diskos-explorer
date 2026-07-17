@@ -243,6 +243,12 @@ def render_borehole_page(dossier: dict, on_date: str, prose: str = "") -> str:
     else:
         lines.append("No report in the local mirror.")
 
+    biostrat_text = dossier.get("biostrat_text")
+    if biostrat_text:
+        lines += ["", "## Biostratigraphy", "",
+                  "Text from the biostratigraphy report (scanned reports transcribed via OCR):",
+                  "", biostrat_text]
+
     lines += ["", "## Related", ""]
     if dossier["sidetracks"]:
         lines.append("- Sidetracks: " + ", ".join(f"[[well_{s}]]" for s in dossier["sidetracks"]))
