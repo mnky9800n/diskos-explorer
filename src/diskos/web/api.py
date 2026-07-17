@@ -195,6 +195,25 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=503, detail=f"Assistant unavailable: {exc}")
         return {"question": body.question, "answer": answer, "stats": s}
 
+    @app.get("/api/compare")
+    def compare_logs(wells: str, mnemonic: str = None, user: str = Depends(current_user)) -> dict:
+        from . import workflow
+
+        root = diskos_root(load_config())
+        valid = set(wells_mod.list_well_ids(root))
+        resolved, missing = [], []
+        for wid in (w.strip() for w in wells.split(",") if w.strip()):
+            (resolved if wid in valid else missing).append(wid)
+        if not resolved:
+            raise HTTPException(status_code=404, detail="None of those wells were found.")
+        objs = [wells_mod.well_files(root, wid) for wid in resolved]
+        try:
+            out = workflow.compare_logs(objs, mnemonic)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        out["missing"] = missing
+        return out
+
     @app.get("/api/map")
     def wells_map(user: str = Depends(current_user)) -> dict:
         from ..wiki.mapdata import map_points

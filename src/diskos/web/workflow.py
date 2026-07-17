@@ -54,6 +54,49 @@ def plot_log(well, mnemonic: str | None = None, instruction: str = "") -> dict:
     return {"title": f"{well.well_id}  {pick} vs depth", "image": _figure_to_data_uri(fig), "mnemonic": pick}
 
 
+def compare_logs(wells, mnemonic: str | None = None) -> dict:
+    """Plot one curve across several wells, side by side, for correlation (#20).
+
+    ``wells`` is a list of Well objects. ``mnemonic`` picks the curve (any log
+    type, #23); gamma is the default. Wells lacking logs or the curve are
+    skipped, not fatal. Returns {title, image, curve, used, skipped}.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+
+    from ..welllog import curves as wl
+    from ..welllog import plot as wlp
+
+    tracks: dict = {}
+    used: list[str] = []
+    skipped: list[str] = []
+    for well in wells:
+        las_files = well.files.get("logs", [])
+        if not las_files:
+            skipped.append(well.well_id)
+            continue
+        try:
+            df = wl.read_las(las_files[0])
+            pick = mnemonic if (mnemonic and mnemonic in df.columns) else wl.gamma_column(df)
+            tracks[f"{well.well_id}:{pick}"] = wl.curve_series(df, pick)
+            used.append(well.well_id)
+        except Exception:
+            skipped.append(well.well_id)
+
+    if not tracks:
+        raise ValueError(f"none of the selected wells have a {mnemonic or 'gamma'} curve")
+
+    curve = mnemonic or "gamma"
+    fig = wlp.plot_correlation(tracks)
+    return {
+        "title": f"{curve} across {len(used)} well(s)",
+        "image": _figure_to_data_uri(fig),
+        "curve": curve,
+        "used": used,
+        "skipped": skipped,
+    }
+
+
 def run(well, kind: str, mnemonic: str | None, instruction: str) -> dict:
     """Dispatch a workflow instruction on a source to an output artifact."""
     if kind == "log":

@@ -45,3 +45,16 @@ def test_plot_correlation_writes_figure(tmp_path):
     out = tmp_path / "logs.png"
     plot.plot_correlation({"7_11-1:GR": gr}, out_path=out)
     assert out.exists() and out.stat().st_size > 0
+
+
+def test_track_fill_is_clipped_behind_curve():
+    # The gradient image must be clipped (to the region left of the curve), not
+    # flooding the whole track (issue #21).
+    import matplotlib
+    matplotlib.use("Agg")
+
+    df = curves.read_las(LAS)
+    ax = plot.plot_log_track(curves.curve_series(df, "GR"))
+    images = ax.get_images()
+    assert images, "expected a gradient image"
+    assert images[0].get_clip_path() is not None  # clipped, not full-track

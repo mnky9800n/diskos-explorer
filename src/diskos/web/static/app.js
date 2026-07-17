@@ -193,6 +193,51 @@ function renderWorkflow(container) {
   };
   runBtn.addEventListener("click", run);
   run(); // seed the example output on open
+
+  // ---- Compare wells side by side (#20, any curve #23) ----
+  container.appendChild(sectionLabel("Compare wells side by side"));
+  const cmp = document.createElement("div"); cmp.className = "wf";
+  container.appendChild(cmp);
+
+  const cnode = wfNode("Wells to compare", "wf-source");
+  const wellsIn = document.createElement("input"); wellsIn.className = "field";
+  wellsIn.placeholder = "well IDs, comma separated"; wellsIn.value = "31_2-1, 31_2-2, 31_2-3";
+  const curveIn = document.createElement("input"); curveIn.className = "field";
+  curveIn.placeholder = "gamma (default), or GR, DEN, RDEP, DT, NEU...";
+  const cRow = document.createElement("div"); cRow.className = "wf-row";
+  cRow.append(labelWrap("Wells", wellsIn), labelWrap("Curve", curveIn));
+  cnode.body.appendChild(cRow);
+  const cBtn = document.createElement("button"); cBtn.className = "btn"; cBtn.textContent = "Compare ▸";
+  const cBar = document.createElement("div"); cBar.className = "ask-bar"; cBar.appendChild(cBtn);
+  cnode.body.appendChild(cBar);
+  cmp.appendChild(cnode.node);
+  cmp.appendChild(wfConnector());
+  const cOut = document.createElement("div"); cOut.className = "wf-outputs"; cmp.appendChild(cOut);
+
+  const compare = async () => {
+    cBtn.disabled = true;
+    cOut.replaceChildren();
+    const pending = wfNode("Comparing…", "wf-output");
+    pending.body.appendChild(msg("Rendering the comparison…"));
+    cOut.appendChild(pending.node);
+    try {
+      const q = new URLSearchParams({ wells: wellsIn.value.trim() });
+      if (curveIn.value.trim()) q.set("mnemonic", curveIn.value.trim());
+      const d = await fetchJSON("/api/compare?" + q.toString());
+      pending.node.remove();
+      const out = wfNode("Output · " + d.title, "wf-output");
+      const img = document.createElement("img"); img.className = "wf-img"; img.src = d.image; img.alt = d.title;
+      out.body.appendChild(img);
+      const notes = [];
+      if (d.skipped && d.skipped.length) notes.push("no " + d.curve + ": " + d.skipped.join(", "));
+      if (d.missing && d.missing.length) notes.push("not found: " + d.missing.join(", "));
+      if (notes.length) out.body.appendChild(msg(notes.join(" · ")));
+      cOut.appendChild(out.node);
+    } catch (e) {
+      pending.body.replaceChildren(errorMsg("Could not compare: " + e.message));
+    } finally { cBtn.disabled = false; }
+  };
+  cBtn.addEventListener("click", compare);
 }
 
 function wfNode(title, cls) {

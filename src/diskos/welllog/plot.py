@@ -14,30 +14,42 @@ import pandas as pd
 
 
 def plot_log_track(series: pd.Series, ax=None, cmap: str = "viridis_r", label: str | None = None):
-    """Plot one curve as a color-filled depth track with the line overlaid.
+    """Plot one curve as a depth track with a gradient filled behind the curve.
 
-    Depth increases downward. Returns the Axes.
+    The color gradient (by value) fills only the area between the left axis and
+    the curve, not the whole track, so the curve's shape reads clearly (matching
+    Jack's notebook). Depth increases downward. Returns the Axes.
     """
     import matplotlib.pyplot as plt
+    from matplotlib.patches import PathPatch
+    from matplotlib.path import Path as MplPath
 
     if ax is None:
         _, ax = plt.subplots(figsize=(2, 10))
 
     depth = series.index.to_numpy(dtype=float)
     values = series.to_numpy(dtype=float)
+    top, bot = float(np.nanmin(depth)), float(np.nanmax(depth))
 
-    # Color strip: extent puts shallow depth at the top (increasing downward).
-    ax.imshow(
-        values[:, None], aspect="auto", cmap=cmap,
-        extent=[0, 1, float(np.nanmax(depth)), float(np.nanmin(depth))],
-    )
-
-    # Overlay the curve, normalized into the [0, 1] strip width.
     vmin, vmax = np.nanmin(values), np.nanmax(values)
-    if vmax > vmin:
-        xnorm = (values - vmin) / (vmax - vmin)
-        ax.plot(xnorm, depth, color="k", lw=0.5)
+    xnorm = (values - vmin) / (vmax - vmin) if vmax > vmin else np.zeros_like(values)
 
+    # Gradient colored by value at each depth, spanning the track width...
+    im = ax.imshow(values[:, None], aspect="auto", cmap=cmap, extent=[0, 1, bot, top])
+
+    # ...then clipped to the region left of the curve, so the fill sits behind
+    # the curve instead of flooding the whole track.
+    finite = np.isfinite(xnorm) & np.isfinite(depth)
+    xf, df = xnorm[finite], depth[finite]
+    if xf.size >= 2:
+        verts = np.column_stack([xf, df]).tolist() + [[0.0, df[-1]], [0.0, df[0]]]
+        clip = PathPatch(MplPath(verts), transform=ax.transData, facecolor="none", edgecolor="none")
+        ax.add_patch(clip)
+        im.set_clip_path(clip)
+        ax.plot(xf, df, color="k", lw=0.6)
+
+    ax.set_xlim(0, 1)
+    ax.set_ylim(bot, top)  # shallow at top, deep at bottom
     ax.set_xticks([])
     ax.set_ylabel("depth (m)")
     if label:
