@@ -17,6 +17,30 @@ import io
 import re
 
 
+_TOPS_CACHE: dict = {}
+
+
+def _formation_tops(well_id: str):
+    """Formation tops (FORMATION level) for a well, cached across calls. [] if none."""
+    from .. import formations
+    from .. import npd
+    from ..boreholes import borehole_id
+    from ..config import load_config
+
+    cfg = load_config()
+    key = str(cfg.npd_path())
+    if key not in _TOPS_CACHE:
+        _TOPS_CACHE[key] = (
+            formations.load_formation_tops(cfg.npd_path()),
+            npd.load_factpages(cfg.npd_path()),
+        )
+    tops_by_well, records = _TOPS_CACHE[key]
+    if not tops_by_well:
+        return []
+    bid = borehole_id(well_id, records)
+    return formations.tops_for(tops_by_well, bid, [well_id], level="FORMATION")
+
+
 def _figure_to_data_uri(fig) -> str:
     import matplotlib.pyplot as plt
 
@@ -50,7 +74,9 @@ def plot_log(well, mnemonic: str | None = None, instruction: str = "") -> dict:
         pick = wl.gamma_column(df)
 
     series = wl.curve_series(df, pick)
-    fig = wlp.plot_correlation({f"{well.well_id}:{pick}": series})
+    label = f"{well.well_id}:{pick}"
+    tops = _formation_tops(well.well_id)
+    fig = wlp.plot_correlation({label: series}, tops_by_label={label: tops} if tops else None)
     return {"title": f"{well.well_id}  {pick} vs depth", "image": _figure_to_data_uri(fig), "mnemonic": pick}
 
 
@@ -68,6 +94,7 @@ def compare_logs(wells, mnemonic: str | None = None) -> dict:
     from ..welllog import plot as wlp
 
     tracks: dict = {}
+    tops_by_label: dict = {}
     used: list[str] = []
     skipped: list[str] = []
     for well in wells:
@@ -78,7 +105,11 @@ def compare_logs(wells, mnemonic: str | None = None) -> dict:
         try:
             df = wl.read_las(las_files[0])
             pick = mnemonic if (mnemonic and mnemonic in df.columns) else wl.gamma_column(df)
-            tracks[f"{well.well_id}:{pick}"] = wl.curve_series(df, pick)
+            label = f"{well.well_id}:{pick}"
+            tracks[label] = wl.curve_series(df, pick)
+            tops = _formation_tops(well.well_id)
+            if tops:
+                tops_by_label[label] = tops
             used.append(well.well_id)
         except Exception:
             skipped.append(well.well_id)
@@ -87,7 +118,7 @@ def compare_logs(wells, mnemonic: str | None = None) -> dict:
         raise ValueError(f"none of the selected wells have a {mnemonic or 'gamma'} curve")
 
     curve = mnemonic or "gamma"
-    fig = wlp.plot_correlation(tracks)
+    fig = wlp.plot_correlation(tracks, tops_by_label=tops_by_label)
     return {
         "title": f"{curve} across {len(used)} well(s)",
         "image": _figure_to_data_uri(fig),

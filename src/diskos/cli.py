@@ -314,20 +314,27 @@ def wiki_search(
 
 @npd_app.command("fetch")
 def npd_fetch() -> None:
-    """Download the Sodir/NPD FactPages wellbore CSVs into the cached npd dir."""
+    """Download the Sodir/NPD wellbore register + formation tops into the npd dir."""
+    from . import formations
     from . import npd as npd_mod
 
     cfg = load_config()
     dest = cfg.npd_path()
-    typer.echo(f"Fetching Sodir FactPages wellbore tables into {dest} ...")
+    typer.echo(f"Fetching Sodir FactPages into {dest} ...")
     written = npd_mod.fetch_factpages(dest)
+    written += formations.fetch(dest)
     if not written:
         typer.echo("No tables downloaded (network or endpoint issue).", err=True)
         raise typer.Exit(code=1)
     records = npd_mod.load_factpages(dest)
+    tops = formations.load_formation_tops(dest)
+    n_tops = sum(len(v) for v in tops.values())
     for path in written:
         typer.echo(f"  {path.name}")
-    typer.echo(f"\n{len(records)} wellbore records available from {len(written)} table(s).")
+    typer.echo(
+        f"\n{len(records)} wellbore records; {n_tops} formation tops across "
+        f"{len(tops)} wellbores."
+    )
 
 
 @app.command()
