@@ -42,9 +42,13 @@ model = "llama3.3:70b"
 api_key_env = "OLLAMA_API_KEY"
 
 [llm.profiles.vision]
-# Microscope-image triage/captioning. NOT reliable for species ID.
+# Scanned-report OCR + microscope-image triage. Uses a small-context variant of
+# qwen2.5vl (create once on the Ollama host:
+#   printf 'FROM qwen2.5vl:7b\nPARAMETER num_ctx 8192\n' | ollama create qwen2.5vl-ocr -f -
+# ) because the stock 128k context inflates the 7B model to ~50GB and spills it
+# entirely to CPU; an 8k context keeps it ~6GB and fully on the GPU.
 base_url = "http://localhost:11434/v1"
-model = "qwen2.5vl:7b"
+model = "qwen2.5vl-ocr"
 api_key_env = "OLLAMA_API_KEY"
 
 [llm.profiles.modal]

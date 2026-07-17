@@ -44,3 +44,20 @@ def test_dossier_picks_up_cached_ocr(tmp_path):
     assert rep["has_text"] is True
     assert rep["source"] == "ocr"
     assert "Apectodinium" in enriched["report_excerpt"]
+
+    # The full biostrat text is surfaced on the page (readable + searchable), not
+    # just fed to the model.
+    assert "Apectodinium" in enriched["biostrat_text"]
+    from diskos.wiki.ingest import render_borehole_page
+
+    page = render_borehole_page(enriched, on_date="2026-01-01")
+    assert "## Biostratigraphy" in page
+    assert "Apectodinium homomorphum acme" in page
+
+
+def test_no_biostrat_text_key_when_absent():
+    # A well without a biostrat report keeps no biostrat_text key (so its page
+    # hash is unaffected and it is not needlessly regenerated).
+    groups = group_boreholes(wells.catalog(SAMPLE_ROOT), npd.load_factpages(NPD_SAMPLE))
+    d = build_dossier(groups["7_11-1"])  # no ocr_dir, no biostrat report
+    assert "biostrat_text" not in d
