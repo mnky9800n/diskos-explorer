@@ -238,6 +238,80 @@ function renderWorkflow(container) {
     } finally { cBtn.disabled = false; }
   };
   cBtn.addEventListener("click", compare);
+
+  // ---- Analyse a formation across wells (#24) ----
+  container.appendChild(sectionLabel("Analyse a formation across wells"));
+  const anz = document.createElement("div"); anz.className = "wf";
+  container.appendChild(anz);
+
+  const anode = wfNode("Formation analysis", "wf-source");
+  const aWells = document.createElement("input"); aWells.className = "field";
+  aWells.placeholder = "well IDs, comma separated"; aWells.value = "31_2-1, 31_3-2";
+  const aForm = document.createElement("input"); aForm.className = "field";
+  aForm.placeholder = "formation, e.g. BRENT GP";
+  const aTop = document.createElement("input"); aTop.className = "field"; aTop.placeholder = "top m";
+  const aBot = document.createElement("input"); aBot.className = "field"; aBot.placeholder = "bottom m";
+  const aRow1 = document.createElement("div"); aRow1.className = "wf-row";
+  aRow1.append(labelWrap("Wells", aWells), labelWrap("Formation", aForm));
+  const aRow2 = document.createElement("div"); aRow2.className = "wf-row";
+  aRow2.append(labelWrap("or depth", aTop), labelWrap("to", aBot));
+  anode.body.append(aRow1, aRow2);
+  const aBtn = document.createElement("button"); aBtn.className = "btn"; aBtn.textContent = "Analyse ▸";
+  const aBar = document.createElement("div"); aBar.className = "ask-bar"; aBar.appendChild(aBtn);
+  anode.body.appendChild(aBar);
+  anz.appendChild(anode.node);
+  anz.appendChild(wfConnector());
+  const aOut = document.createElement("div"); aOut.className = "wf-outputs"; anz.appendChild(aOut);
+
+  const analyse = async () => {
+    aBtn.disabled = true;
+    aOut.replaceChildren();
+    const pending = wfNode("Analysing…", "wf-output");
+    pending.body.appendChild(msg("Reading the logs and comparing…"));
+    aOut.appendChild(pending.node);
+    try {
+      const q = new URLSearchParams({ wells: aWells.value.trim() });
+      if (aForm.value.trim()) q.set("formation", aForm.value.trim());
+      if (aTop.value.trim()) q.set("top", aTop.value.trim());
+      if (aBot.value.trim()) q.set("bottom", aBot.value.trim());
+      const d = await fetchJSON("/api/analyze?" + q.toString());
+      pending.node.remove();
+      const out = wfNode("Analysis · " + (d.target || "interval"), "wf-output");
+      if (d.narrative) { const p = document.createElement("p"); p.className = "analysis-note"; p.textContent = d.narrative; out.body.appendChild(p); }
+      out.body.appendChild(analysisTable(d.per_well));
+      const notes = [];
+      if (d.missing && d.missing.length) notes.push("no data/formation: " + d.missing.join(", "));
+      if (d.not_found && d.not_found.length) notes.push("not found: " + d.not_found.join(", "));
+      if (notes.length) out.body.appendChild(msg(notes.join(" · ")));
+      aOut.appendChild(out.node);
+    } catch (e) {
+      pending.body.replaceChildren(errorMsg("Could not analyse: " + e.message));
+    } finally { aBtn.disabled = false; }
+  };
+  aBtn.addEventListener("click", analyse);
+}
+
+const CURVE_ORDER = ["gamma", "density", "neutron", "sonic", "resistivity_deep", "resistivity_med"];
+const CURVE_SHORT = { gamma: "gamma", density: "density", neutron: "neutron", sonic: "sonic", resistivity_deep: "res deep", resistivity_med: "res med" };
+
+function analysisTable(perWell) {
+  const table = document.createElement("table"); table.className = "wiki-table";
+  const head = document.createElement("tr");
+  ["well", "interval", ...CURVE_ORDER.map((c) => CURVE_SHORT[c])].forEach((h) => {
+    const th = document.createElement("th"); th.textContent = h; head.appendChild(th);
+  });
+  table.appendChild(head);
+  for (const w of perWell || []) {
+    const tr = document.createElement("tr");
+    const cells = [w.well_id, `${w.interval[0].toFixed(0)}-${w.interval[1].toFixed(0)} m`];
+    CURVE_ORDER.forEach((c) => {
+      const s = w.curves[c];
+      cells.push(s ? `${s.mean} (${s.mnemonic})` : "-");
+    });
+    cells.forEach((v, i) => { const td = document.createElement(i ? "td" : "th"); td.textContent = v; tr.appendChild(td); });
+    table.appendChild(tr);
+  }
+  return table;
 }
 
 function wfNode(title, cls) {
