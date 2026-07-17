@@ -278,3 +278,6 @@ a.wikilink:hover { color: #1084d0; }
 }
 .borehole-map .leaflet-container { background: #aad3df; font-family: var(--sans); }
 .leaflet-tooltip { font-family: var(--sans); font-size: 11px; }
+
+/* Formation analysis narrative */
+.analysis-note { margin: 4px 0 10px; font-size: 12px; line-height: 1.5; background: #ffffcc; border: 1px solid #808080; padding: 6px 8px; }

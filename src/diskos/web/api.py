@@ -35,6 +35,19 @@ def wiki_dir() -> Path:
 
 _NPD_CACHE: dict[str, dict] = {}
 _MAP_CACHE: dict[str, list] = {}
+_TOPS_CACHE: dict[str, tuple] = {}
+
+
+def _tops_and_records():
+    """Cached (formation tops, wellbore register) for the analysis endpoint."""
+    from ..config import load_config as _lc
+    from .. import formations as _fm
+    from .. import npd as _npd
+
+    path = str(_lc().npd_path())
+    if path not in _TOPS_CACHE:
+        _TOPS_CACHE[path] = (_fm.load_formation_tops(path), _npd.load_factpages(path))
+    return _TOPS_CACHE[path]
 
 
 def _npd_records():
@@ -212,6 +225,33 @@ def create_app() -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         out["missing"] = missing
+        return out
+
+    @app.get("/api/analyze")
+    def analyze_formation(
+        wells: str, formation: str = None, top: float = None, bottom: float = None,
+        user: str = Depends(current_user),
+    ) -> dict:
+        from . import analysis, assistant
+
+        root = diskos_root(load_config())
+        valid = set(wells_mod.list_well_ids(root))
+        resolved, not_found = [], []
+        for wid in (w.strip() for w in wells.split(",") if w.strip()):
+            (resolved if wid in valid else not_found).append(wid)
+        if not resolved:
+            raise HTTPException(status_code=404, detail="None of those wells were found.")
+        objs = [wells_mod.well_files(root, wid) for wid in resolved]
+        tops_by_well, records = _tops_and_records()
+        try:
+            client = assistant.make_client()
+        except Exception:
+            client = None
+        out = analysis.analyze(
+            objs, formation=formation, top=top, bottom=bottom,
+            tops_by_well=tops_by_well, records=records, client=client,
+        )
+        out["not_found"] = not_found
         return out
 
     @app.get("/api/map")

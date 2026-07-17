@@ -158,6 +158,14 @@ def test_compare_endpoint_reports_missing(client):
     assert d["missing"] == ["nope_9-9"]
 
 
+def test_analyze_endpoint_interval(client):
+    # An explicit interval needs no formation-tops table, so it works in the test env.
+    r = client.get("/api/analyze", params={"wells": "7_11-1", "top": 1000, "bottom": 1005})
+    assert r.status_code == 200
+    d = r.json()
+    assert d["per_well"] and d["per_well"][0]["curves"]["gamma"]["n"] >= 1
+
+
 def test_wiki_endpoints_serve_built_pages(monkeypatch, tmp_path):
     from diskos.wiki.build import build_wiki
 
