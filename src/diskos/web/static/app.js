@@ -487,7 +487,7 @@ function renderWell(detail) {
   const tabs = [];
   tabs.push({ label: "Wiki", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/wiki`), render: renderWikiPanel });
   tabs.push({ label: "Assistant", render: (c) => renderAssistantPanel(c, detail) });
-  if (detail.counts.logs) tabs.push({ label: "Well logs", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/logs`), render: renderLogsPanel });
+  if (detail.counts.logs) tabs.push({ label: "Well logs", render: (c) => renderLogsPanel(c, id) });
   if (detail.counts.geology) tabs.push({ label: "Graph", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/graph`), render: renderGraphPanel });
   tabs.push({ label: "Files", render: (c) => renderFilesPanel(c, detail) });
   buildTabs(panel, tabs);
@@ -772,14 +772,53 @@ function graphNode(n, x, y, w, h, kind) {
   return g;
 }
 
-function renderLogsPanel(container, data) {
-  const files = (data.files || []).filter((f) => f.tracks && f.tracks.length);
-  if (!files.length) { container.appendChild(msg("No readable log curves for this well.")); return; }
-  for (const file of files) {
-    const mn = file.tracks.map((t) => t.mnemonic).join(", ");
-    container.appendChild(sectionLabel(`${file.file} · ${mn}`));
-    for (const track of file.tracks) container.appendChild(buildLogCard(track));
+async function renderLogsPanel(container, wellId) {
+  container.replaceChildren(loadingMsg());
+  let data;
+  try {
+    data = await fetchJSON(`/api/wells/${encodeURIComponent(wellId)}/logs`);
+  } catch (e) {
+    container.replaceChildren(errorMsg("Could not load this well's logs."));
+    return;
   }
+  container.replaceChildren();
+
+  // Curve picker: any mnemonic present in the well, defaulting to gamma (#23).
+  const mnems = [...new Set((data.files || []).flatMap((f) => f.mnemonics || []))];
+  const gamma = (data.files || []).map((f) => f.gamma).find(Boolean);
+  const bar = document.createElement("div"); bar.className = "ask-bar";
+  const sel = document.createElement("select"); sel.className = "field";
+  for (const mn of mnems) {
+    const o = document.createElement("option"); o.value = mn; o.textContent = mn;
+    if (mn === gamma) o.selected = true;
+    sel.appendChild(o);
+  }
+  bar.appendChild(labelWrap("Curve", sel));
+  container.appendChild(bar);
+
+  const plots = document.createElement("div");
+  container.appendChild(plots);
+
+  const draw = (d) => {
+    const files = (d.files || []).filter((f) => f.tracks && f.tracks.length);
+    if (!files.length) { plots.replaceChildren(msg("No readable data for this curve.")); return; }
+    plots.replaceChildren();
+    for (const file of files) {
+      const mn = file.tracks.map((t) => t.mnemonic).join(", ");
+      plots.appendChild(sectionLabel(`${file.file} · ${mn}`));
+      for (const track of file.tracks) plots.appendChild(buildLogCard(track));
+    }
+  };
+  draw(data);
+
+  sel.addEventListener("change", async () => {
+    plots.replaceChildren(loadingMsg());
+    try {
+      draw(await fetchJSON(`/api/wells/${encodeURIComponent(wellId)}/logs?mnemonic=${encodeURIComponent(sel.value)}`));
+    } catch (e) {
+      plots.replaceChildren(errorMsg("Could not load that curve."));
+    }
+  });
 }
 
 // ---------- well-log gamma track ----------
