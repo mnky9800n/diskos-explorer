@@ -666,6 +666,7 @@ function renderWell(detail) {
   if (detail.counts.geology) tabs.push({ label: "Report links", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/graph`), render: renderGraphPanel });
   if (detail.counts.images) tabs.push({ label: "Photos", render: (c) => renderPhotosPanel(c, detail) });
   tabs.push({ label: "Files", render: (c) => renderFilesPanel(c, detail) });
+  tabs.push({ label: "Publications", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/publications`), render: renderPublicationsPanel });
   buildTabs(panel, tabs);
 }
 
@@ -848,6 +849,24 @@ function renderAssistantPanel(container, detail) {
   };
   btn.addEventListener("click", run);
   box.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run(); });
+}
+
+function renderPublicationsPanel(container, data) {
+  const pubs = data.publications || [];
+  container.appendChild(sectionLabel(`Publications mentioning ${data.well}${data.field ? " / " + data.field : ""}`));
+  container.appendChild(msg("From Crossref, matched by borehole id and field name. Relevance varies, treat these as candidates."));
+  if (!pubs.length) { container.appendChild(msg("No publications found (or Crossref was unavailable).")); return; }
+  const ul = document.createElement("ul"); ul.className = "pub-list";
+  for (const p of pubs) {
+    const li = document.createElement("li");
+    const a = document.createElement("a"); a.className = "pub-title";
+    a.href = p.url || (p.doi ? "https://doi.org/" + p.doi : "#"); a.target = "_blank"; a.rel = "noopener";
+    a.textContent = p.title;
+    const meta = document.createElement("div"); meta.className = "pub-meta";
+    meta.textContent = [p.authors, p.year, p.container].filter(Boolean).join(" · ");
+    li.append(a, meta); ul.appendChild(li);
+  }
+  container.appendChild(ul);
 }
 
 function renderPhotosPanel(container, detail) {
