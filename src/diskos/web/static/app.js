@@ -118,10 +118,14 @@ function renderMapPanel(container, data) {
 
   const map = L.map(mapEl, { preferCanvas: true }).setView([60, 3], 5);
   MAP = map;
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+  const carto = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
     subdomains: "abcd", maxZoom: 18,
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
   }).addTo(map);
+  const bathy = L.tileLayer("https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png", {
+    maxZoom: 12, attribution: '&copy; EMODnet Bathymetry',
+  });
+  L.control.layers({ "Map (CARTO)": carto, "Bathymetry (EMODnet)": bathy }, {}, { position: "topright" }).addTo(map);
 
   const bounds = [];
   const markerList = [];
@@ -880,17 +884,22 @@ async function renderLogsPanel(container, wellId) {
   }
   container.replaceChildren();
 
-  // Curve picker: any mnemonic present in the well, defaulting to gamma (#23).
+  // Multi-curve picker: check the curves to show as depth-aligned side-by-side
+  // tracks (#3, #23). Gamma is on by default.
   const mnems = [...new Set((data.files || []).flatMap((f) => f.mnemonics || []))];
   const gamma = (data.files || []).map((f) => f.gamma).find(Boolean);
-  const bar = document.createElement("div"); bar.className = "ask-bar";
-  const sel = document.createElement("select"); sel.className = "field";
+  const bar = document.createElement("div"); bar.className = "curve-picker";
+  const boxes = {};
   for (const mn of mnems) {
-    const o = document.createElement("option"); o.value = mn; o.textContent = mn;
-    if (mn === gamma) o.selected = true;
-    sel.appendChild(o);
+    const lbl = document.createElement("label"); lbl.className = "curve-box";
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = mn;
+    if (mn === gamma) cb.checked = true;
+    boxes[mn] = cb;
+    lbl.append(cb, document.createTextNode(" " + mn));
+    bar.appendChild(lbl);
   }
-  bar.appendChild(labelWrap("Curve", sel));
+  const plotBtn = document.createElement("button"); plotBtn.className = "btn"; plotBtn.textContent = "Plot selected";
+  bar.appendChild(plotBtn);
   container.appendChild(bar);
 
   const plots = document.createElement("div");
@@ -898,86 +907,85 @@ async function renderLogsPanel(container, wellId) {
 
   const draw = (d) => {
     const files = (d.files || []).filter((f) => f.tracks && f.tracks.length);
-    if (!files.length) { plots.replaceChildren(msg("No readable data for this curve.")); return; }
+    if (!files.length) { plots.replaceChildren(msg("No readable data for the selected curves.")); return; }
     plots.replaceChildren();
     for (const file of files) {
-      const mn = file.tracks.map((t) => t.mnemonic).join(", ");
-      plots.appendChild(sectionLabel(`${file.file} · ${mn}`));
-      for (const track of file.tracks) plots.appendChild(buildLogCard(track));
+      plots.appendChild(sectionLabel(`${file.file} · ${file.tracks.map((t) => t.mnemonic).join(", ")}`));
+      plots.appendChild(buildLogFigure(file));
     }
   };
   draw(data);
 
-  sel.addEventListener("change", async () => {
+  const replot = async () => {
+    const chosen = Object.keys(boxes).filter((m) => boxes[m].checked);
+    if (!chosen.length) { plots.replaceChildren(msg("Select at least one curve.")); return; }
     plots.replaceChildren(loadingMsg());
     try {
-      draw(await fetchJSON(`/api/wells/${encodeURIComponent(wellId)}/logs?mnemonic=${encodeURIComponent(sel.value)}`));
+      draw(await fetchJSON(`/api/wells/${encodeURIComponent(wellId)}/logs?mnemonic=${encodeURIComponent(chosen.join(","))}`));
     } catch (e) {
-      plots.replaceChildren(errorMsg("Could not load that curve."));
+      plots.replaceChildren(errorMsg("Could not load those curves."));
     }
-  });
+  };
+  plotBtn.addEventListener("click", replot);
 }
 
-// ---------- well-log gamma track ----------
-function buildLogCard(track) {
-  const pts = (track.points || [])
-    .filter((p) => Number.isFinite(p.depth) && Number.isFinite(p.value))
-    .sort((a, b) => a.depth - b.depth);
-  if (!pts.length) return msg("No curve data.");
+// Depth-aligned side-by-side tracks for one LAS file, with a shared crosshair.
+function buildLogFigure(file) {
+  const tracks = (file.tracks || []).filter((t) => t.points && t.points.length);
+  if (!tracks.length) return msg("No curve data.");
+  let dmin = Infinity, dmax = -Infinity;
+  for (const t of tracks) for (const p of t.points) { if (p.depth < dmin) dmin = p.depth; if (p.depth > dmax) dmax = p.depth; }
 
-  const card = document.createElement("div");
-  card.className = "chartcard";
-  const wrap = document.createElement("div");
-  wrap.className = "chart-wrap";
-  card.appendChild(wrap);
-
-  const W = 560, H = 460, m = { t: 16, r: 22, b: 42, l: 64 };
-  const plotW = W - m.l - m.r, plotH = H - m.t - m.b;
-  const dmin = Math.min(...pts.map((p) => p.depth)), dmax = Math.max(...pts.map((p) => p.depth));
-  const vmax = Math.max(...pts.map((p) => p.value)), vmin = Math.min(0, ...pts.map((p) => p.value));
+  const H = 520, m = { t: 26, r: 12, b: 28, l: 58 }, colW = 140, gap = 16;
+  const plotH = H - m.t - m.b;
+  const W = m.l + tracks.length * colW + (tracks.length - 1) * gap + m.r;
   const yOf = (d) => m.t + (dmax === dmin ? plotH / 2 : ((d - dmin) / (dmax - dmin)) * plotH);
-  const xOf = (v) => m.l + ((v - vmin) / ((vmax - vmin) || 1)) * plotW;
-  const color = cssvar("--s1");
 
-  const svg = el("svg", { class: "depthchart", viewBox: `0 0 ${W} ${H}`, role: "img" });
+  const svg = el("svg", { class: "depthchart", viewBox: `0 0 ${W} ${H}` });
   const grid = el("g", { class: "grid" });
-  const yT = niceTicks(dmin, dmax, 6), xT = niceTicks(vmin, vmax, 4);
-  for (const d of yT) grid.appendChild(el("line", { x1: m.l, x2: m.l + plotW, y1: yOf(d), y2: yOf(d) }));
-  for (const v of xT) grid.appendChild(el("line", { x1: xOf(v), x2: xOf(v), y1: m.t, y2: m.t + plotH }));
-  svg.appendChild(grid);
-
   const axis = el("g", { class: "axis" });
-  axis.appendChild(el("line", { x1: m.l, x2: m.l, y1: m.t, y2: m.t + plotH, stroke: cssvar("--line") }));
-  for (const d of yT) { const t = el("text", { x: m.l - 8, y: yOf(d) + 3, "text-anchor": "end" }); t.textContent = Math.round(d); axis.appendChild(t); }
-  axis.appendChild(text(m.l - 46, m.t + plotH / 2, "depth (m)", { class: "axis-title", transform: `rotate(-90 ${m.l - 46} ${m.t + plotH / 2})`, "text-anchor": "middle" }));
-  for (const v of xT) { const t = el("text", { x: xOf(v), y: m.t + plotH + 16, "text-anchor": "middle" }); t.textContent = trim(v); axis.appendChild(t); }
-  axis.appendChild(text(m.l + plotW / 2, H - 6, track.mnemonic, { class: "axis-title", "text-anchor": "middle" }));
-  svg.appendChild(axis);
+  for (const d of niceTicks(dmin, dmax, 8)) {
+    grid.appendChild(el("line", { x1: m.l, x2: W - m.r, y1: yOf(d), y2: yOf(d) }));
+    const tx = el("text", { x: m.l - 8, y: yOf(d) + 3, "text-anchor": "end" }); tx.textContent = Math.round(d); axis.appendChild(tx);
+  }
+  axis.appendChild(text(14, m.t + plotH / 2, "depth (m)", { class: "axis-title", transform: `rotate(-90 14 ${m.t + plotH / 2})`, "text-anchor": "middle" }));
+  svg.appendChild(grid); svg.appendChild(axis);
 
-  const dAttr = pts.map((p, i) => `${i ? "L" : "M"}${xOf(p.value).toFixed(1)},${yOf(p.depth).toFixed(1)}`).join(" ");
-  svg.appendChild(el("path", { class: "serie-line", d: dAttr, stroke: color }));
-
-  const cross = el("line", { class: "crosshair", x1: m.l, x2: m.l + plotW, y1: m.t, y2: m.t });
-  svg.appendChild(cross);
-  const overlay = el("rect", { x: m.l, y: m.t, width: plotW, height: plotH, fill: "transparent" });
-  svg.appendChild(overlay);
-  wrap.appendChild(svg);
-
-  const tip = document.createElement("div");
-  tip.className = "tooltip";
-  wrap.appendChild(tip);
-  const depths = pts.map((p) => p.depth);
-  overlay.addEventListener("mousemove", (e) => {
-    const rect = svg.getBoundingClientRect(), scale = H / rect.height;
-    const d = nearest(depths, dmin + ((e.clientY - rect.top) * scale - m.t) / plotH * (dmax - dmin));
-    const p = pts.find((q) => q.depth === d);
-    cross.setAttribute("y1", yOf(d)); cross.setAttribute("y2", yOf(d)); cross.style.opacity = 1;
-    tip.innerHTML = `<div class="tt-depth">${Math.round(d)} m</div><div class="tt-row"><span class="k"><span class="tt-sw" style="background:${color}"></span>${track.mnemonic}</span><span class="v">${trim(p.value)}</span></div>`;
-    tip.style.opacity = 1;
-    tip.style.left = Math.max(8, Math.min(e.clientX - rect.left + 14, rect.width - tip.offsetWidth - 8)) + "px";
-    tip.style.top = Math.min(yOf(d) / scale + 8, rect.height - tip.offsetHeight - 8) + "px";
+  const meta = [];
+  tracks.forEach((t, i) => {
+    const x0 = m.l + i * (colW + gap);
+    const pts = t.points.slice().sort((a, b) => a.depth - b.depth);
+    const vals = pts.map((p) => p.value);
+    const vmin = Math.min(0, ...vals), vmax = Math.max(...vals);
+    const xOf = (v) => x0 + ((v - vmin) / ((vmax - vmin) || 1)) * colW;
+    const dpath = pts.map((p, j) => `${j ? "L" : "M"}${xOf(p.value).toFixed(1)} ${yOf(p.depth).toFixed(1)}`).join(" ");
+    const path = el("path", { d: dpath, fill: "none", class: "serie-line" }); path.style.stroke = cssvar("--s1"); svg.appendChild(path);
+    svg.appendChild(el("line", { x1: x0, x2: x0, y1: m.t, y2: m.t + plotH, class: "axis" }));
+    svg.appendChild(text(x0 + colW / 2, m.t - 9, t.mnemonic, { class: "axis-title", "text-anchor": "middle" }));
+    meta.push({ mnemonic: t.mnemonic, x0, pts });
   });
-  overlay.addEventListener("mouseleave", () => { cross.style.opacity = 0; tip.style.opacity = 0; });
+
+  const cross = el("line", { x1: m.l, x2: W - m.r, y1: 0, y2: 0, class: "crosshair" }); cross.style.display = "none"; svg.appendChild(cross);
+  const overlay = el("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: plotH, fill: "transparent" }); svg.appendChild(overlay);
+
+  const card = document.createElement("div"); card.className = "chartcard";
+  const wrap = document.createElement("div"); wrap.className = "chart-wrap"; wrap.appendChild(svg); card.appendChild(wrap);
+  const tip = document.createElement("div"); tip.className = "tooltip"; tip.style.display = "none"; wrap.appendChild(tip);
+
+  overlay.addEventListener("mousemove", (e) => {
+    const r = svg.getBoundingClientRect();
+    const vy = (e.clientY - r.top) / r.height * H;
+    const depth = dmin + ((vy - m.t) / plotH) * (dmax - dmin);
+    if (depth < dmin || depth > dmax) return;
+    cross.setAttribute("y1", vy); cross.setAttribute("y2", vy); cross.style.display = "";
+    const rows = meta.map((mt) => {
+      const p = mt.pts.reduce((b, q) => Math.abs(q.depth - depth) < Math.abs(b.depth - depth) ? q : b, mt.pts[0]);
+      return `<div class="tt-row"><span class="k">${mt.mnemonic}</span><span class="v">${p ? trim(p.value) : "-"}</span></div>`;
+    }).join("");
+    tip.innerHTML = `<div class="tt-depth">${Math.round(depth)} m</div>${rows}`;
+    tip.style.display = ""; tip.style.left = (e.clientX - r.left + 12) + "px"; tip.style.top = (e.clientY - r.top + 8) + "px";
+  });
+  overlay.addEventListener("mouseleave", () => { cross.style.display = "none"; tip.style.display = "none"; });
   return card;
 }
 

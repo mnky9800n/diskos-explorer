@@ -289,3 +289,7 @@ a.wikilink:hover { color: #1084d0; }
 /* Map filter bar */
 .map-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 2px; }
 .map-filter .map-yr { width: 80px; }
+
+/* Multi-curve picker for side-by-side logs */
+.curve-picker { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 4px 0 8px; }
+.curve-box { font-size: 11px; white-space: nowrap; }

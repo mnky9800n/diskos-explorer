@@ -190,6 +190,14 @@ def test_formation_first_and_map_filters(monkeypatch, tmp_path):
     assert by_id["25_7-5"]["match"] is False
 
 
+def test_logs_endpoint_multiple_mnemonics(client):
+    # Side-by-side view requests several curves at once (#3).
+    d = client.get("/api/wells/7_11-1/logs", params={"mnemonic": "GR,HPHI"}).json()
+    tracks = d["files"][0]["tracks"]
+    assert {t["mnemonic"] for t in tracks} == {"GR", "HPHI"}
+    assert all(t["points"] for t in tracks)
+
+
 def test_analyze_endpoint_interval(client):
     # An explicit interval needs no formation-tops table, so it works in the test env.
     r = client.get("/api/analyze", params={"wells": "7_11-1", "top": 1000, "bottom": 1005})
