@@ -43,6 +43,7 @@ def _safe_key(value: str) -> str:
 _NPD_CACHE: dict[str, dict] = {}
 _MAP_CACHE: dict[str, list] = {}
 _TOPS_CACHE: dict[str, tuple] = {}
+_PUBS_CACHE: dict[str, dict] = {}
 
 
 def _tops_and_records():
@@ -355,6 +356,35 @@ def create_app() -> FastAPI:
             cols = [c for c in want if c in df.columns]
         ax = pp.plot_species_vs_depth(df, species_cols=cols, title=f"{well} palynology")
         return {"well": well, "image": _figure_to_data_uri(ax.figure)}
+
+    @app.get("/api/wells/{well_id}/publications")
+    def well_publications(well_id: str, user: str = Depends(current_user)) -> dict:
+        from .. import npd as npd_mod
+        from .. import publications
+        from ..boreholes import borehole_id
+
+        if well_id not in _PUBS_CACHE:
+            records = _npd_records()
+            rec = npd_mod.match(records, well_id)
+            mailto = os.environ.get("DISKOS_CROSSREF_MAILTO")
+            queries = [borehole_id(well_id, records).replace("_", "/")]
+            if rec and rec.field:
+                queries.append(f"{rec.field} field Norwegian North Sea")
+            seen: dict[str, bool] = {}
+            results: list[dict] = []
+            for q in queries:
+                for pub in publications.search(q, rows=10, mailto=mailto):
+                    doi = pub.get("doi")
+                    if doi and doi not in seen:
+                        seen[doi] = True
+                        results.append(pub)
+            _PUBS_CACHE[well_id] = {
+                "well": well_id,
+                "field": rec.field if rec else None,
+                "queries": queries,
+                "publications": results[:25],
+            }
+        return _PUBS_CACHE[well_id]
 
     @app.get("/api/palyno/{well}/csv")
     def palyno_csv(well: str, user: str = Depends(current_user)) -> FileResponse:

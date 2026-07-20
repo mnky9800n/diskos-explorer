@@ -299,3 +299,9 @@ a.wikilink:hover { color: #1084d0; }
 .photo { display: block; box-shadow: var(--raised); background: var(--face); padding: 2px; }
 .photo img { width: 100%; height: 110px; object-fit: cover; display: block; }
 .photo-file { padding: 8px; font-size: 11px; word-break: break-all; color: #000080; }
+
+/* Publications list */
+.pub-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.pub-list li { margin: 0 0 10px; }
+.pub-title { color: #000080; text-decoration: underline; font-size: 12px; }
+.pub-meta { font-size: 11px; color: #505050; margin-top: 1px; }
