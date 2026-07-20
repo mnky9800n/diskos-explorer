@@ -18,7 +18,7 @@ welllog = ["lasio>=0.31"]                       # Phase 3: LAS well logs
 geo = ["pyproj>=3.6"]                            # UTM->WGS84 fallback for well-path coords
 ocr = ["pymupdf>=1.24"]                          # rasterize scanned reports for vision OCR
 llm = ["openai>=1.0"]                           # Phase 4: model access
-web = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "authlib>=1.3", "itsdangerous>=2.2", "openai>=1.0", "pypdf>=4.0", "matplotlib>=3.7"]  # Phase 5 + assistant + workflow plots
+web = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "authlib>=1.3", "itsdangerous>=2.2", "openai>=1.0", "pypdf>=4.0", "matplotlib>=3.7", "python-multipart>=0.0.9"]  # Phase 5 + assistant + workflow plots
 xrf = ["PyMca5>=5.9"]                           # Phase 7: XRF (heavy, kept isolated)
 
 [project.scripts]
@@ -37,6 +37,7 @@ dev = [
     "authlib>=1.3",
     "itsdangerous>=2.2.0",
     "pypdf>=4.0",
+    "python-multipart>=0.0.9",
 ]
 
 [build-system]

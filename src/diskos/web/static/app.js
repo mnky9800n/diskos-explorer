@@ -59,6 +59,81 @@ async function loadWells() {
   $("#mapbtn").addEventListener("click", showMap);
   $("#corpusbtn").addEventListener("click", showCorpus);
   $("#workflowbtn").addEventListener("click", showWorkflow);
+  $("#palynobtn").addEventListener("click", showPalyno);
+}
+
+function showPalyno() {
+  ACTIVE = null;
+  clearMap();
+  renderRail($("#filter").value.trim().toLowerCase());
+  $("#empty").hidden = true;
+  const panel = $("#well");
+  panel.hidden = false;
+  panel.scrollTop = 0;
+  renderPalynoPanel(panel);
+}
+
+function renderPalynoPanel(container) {
+  container.replaceChildren();
+  setStatus("Palynology", "upload a StrataBugs .ASC");
+  const head = document.createElement("div");
+  head.className = "well-head";
+  head.innerHTML = `<h2>Palynology</h2><span class="well-sub">upload a StrataBugs .ASC export to plot species vs depth and export CSV</span>`;
+  container.appendChild(head);
+
+  const bar = document.createElement("div"); bar.className = "ask-bar";
+  const fileIn = document.createElement("input"); fileIn.type = "file"; fileIn.accept = ".ASC,.asc"; fileIn.className = "field";
+  const wellIn = document.createElement("input"); wellIn.className = "field"; wellIn.placeholder = "well name (optional)";
+  const upBtn = document.createElement("button"); upBtn.className = "btn"; upBtn.textContent = "Upload & parse";
+  bar.append(labelWrap("File", fileIn), labelWrap("Well", wellIn), upBtn);
+  container.appendChild(bar);
+  const out = document.createElement("div"); container.appendChild(out);
+
+  const upload = async () => {
+    if (!fileIn.files || !fileIn.files.length) { out.replaceChildren(msg("Choose a .ASC file first.")); return; }
+    out.replaceChildren(loadingMsg());
+    const fd = new FormData();
+    fd.append("file", fileIn.files[0]);
+    if (wellIn.value.trim()) fd.append("well", wellIn.value.trim());
+    try {
+      const res = await fetch(apiUrl("/api/palyno/upload"), { method: "POST", credentials: "include", body: fd });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
+      renderPalynoResult(out, await res.json());
+    } catch (e) { out.replaceChildren(errorMsg("Upload failed: " + e.message)); }
+  };
+  upBtn.addEventListener("click", upload);
+}
+
+function renderPalynoResult(container, d) {
+  container.replaceChildren();
+  container.appendChild(sectionLabel(`${d.well} · ${d.depths} depths · ${d.species.length} target species`));
+  const picker = document.createElement("div"); picker.className = "curve-picker";
+  const boxes = {};
+  for (const sp of d.species) {
+    const lbl = document.createElement("label"); lbl.className = "curve-box";
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = sp; cb.checked = true;
+    boxes[sp] = cb;
+    lbl.append(cb, document.createTextNode(" " + sp.replace(/_/g, " ")));
+    picker.appendChild(lbl);
+  }
+  const plotBtn = document.createElement("button"); plotBtn.className = "btn"; plotBtn.textContent = "Plot species vs depth";
+  const csvA = document.createElement("a"); csvA.className = "btn"; csvA.textContent = "Download CSV";
+  csvA.href = apiUrl(`/api/palyno/${encodeURIComponent(d.well)}/csv`); csvA.target = "_blank"; csvA.rel = "noopener";
+  picker.append(plotBtn, csvA);
+  container.appendChild(picker);
+  const fig = document.createElement("div"); container.appendChild(fig);
+
+  const plot = async () => {
+    const chosen = Object.keys(boxes).filter((s) => boxes[s].checked);
+    fig.replaceChildren(loadingMsg());
+    try {
+      const p = await fetchJSON(`/api/palyno/${encodeURIComponent(d.well)}/plot?species=${encodeURIComponent(chosen.join(","))}`);
+      const img = document.createElement("img"); img.className = "wf-img"; img.src = p.image; img.alt = "species vs depth";
+      fig.replaceChildren(img);
+    } catch (e) { fig.replaceChildren(errorMsg("Plot failed.")); }
+  };
+  plotBtn.addEventListener("click", plot);
+  plot();
 }
 
 // Tear down the Leaflet map before switching views (frees its window listeners),
@@ -589,6 +664,7 @@ function renderWell(detail) {
   tabs.push({ label: "Assistant", render: (c) => renderAssistantPanel(c, detail) });
   if (detail.counts.logs) tabs.push({ label: "Well logs", render: (c) => renderLogsPanel(c, id) });
   if (detail.counts.geology) tabs.push({ label: "Report links", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/graph`), render: renderGraphPanel });
+  if (detail.counts.images) tabs.push({ label: "Photos", render: (c) => renderPhotosPanel(c, detail) });
   tabs.push({ label: "Files", render: (c) => renderFilesPanel(c, detail) });
   buildTabs(panel, tabs);
 }
@@ -772,6 +848,27 @@ function renderAssistantPanel(container, detail) {
   };
   btn.addEventListener("click", run);
   box.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run(); });
+}
+
+function renderPhotosPanel(container, detail) {
+  const imgs = (detail.files && detail.files.images) || [];
+  if (!imgs.length) { container.appendChild(msg("No images for this well.")); return; }
+  container.appendChild(sectionLabel(`${imgs.length} image${imgs.length === 1 ? "" : "s"} (click to enlarge; core scans included)`));
+  const grid = document.createElement("div"); grid.className = "photo-grid";
+  const viewable = /\.(png|jpe?g|gif|bmp|webp)$/i;
+  for (const f of imgs) {
+    const url = apiUrl(`/api/wells/${encodeURIComponent(detail.well_id)}/file?path=${encodeURIComponent(f.rel)}`);
+    const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener";
+    if (viewable.test(f.name)) {
+      a.className = "photo";
+      const img = document.createElement("img"); img.loading = "lazy"; img.src = url; img.alt = f.name; img.title = f.name;
+      a.appendChild(img);
+    } else {
+      a.className = "photo photo-file"; a.textContent = f.name; a.title = f.name;  // TIFF etc. don't render inline
+    }
+    grid.appendChild(a);
+  }
+  container.appendChild(grid);
 }
 
 function renderFilesPanel(container, detail) {

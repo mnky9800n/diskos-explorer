@@ -41,6 +41,7 @@ class Config:
     taxon_decisions: str = "taxon_decisions.csv"
     npd_dir: str = "./data/npd"
     ocr_dir: str = "./data/ocr"
+    palyno_dir: str = "./data/palyno_uploads"
 
     def decisions_path(self) -> Path:
         """Absolute path to the persistent taxon same/different decisions file."""
@@ -63,6 +64,14 @@ class Config:
     def ocr_path(self) -> Path:
         """Absolute path to the cached OCR-transcript directory."""
         path = Path(self.ocr_dir)
+        if not path.is_absolute():
+            path = self.project_root / path
+        return path
+
+    def palyno_path(self) -> Path:
+        """Absolute path to the uploaded-palynology CSV directory (DISKOS_PALYNO_DIR overrides)."""
+        override = os.environ.get("DISKOS_PALYNO_DIR")
+        path = Path(override) if override else Path(self.palyno_dir)
         if not path.is_absolute():
             path = self.project_root / path
         return path
@@ -125,4 +134,5 @@ def load_config(path: Path | None = None) -> Config:
         taxon_decisions=paths.get("taxon_decisions", "taxon_decisions.csv"),
         npd_dir=paths.get("npd_dir", "./data/npd"),
         ocr_dir=paths.get("ocr_dir", "./data/ocr"),
+        palyno_dir=paths.get("palyno_dir", "./data/palyno_uploads"),
     )

@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 
 import numpy as np
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
@@ -31,6 +31,13 @@ def base_path() -> str:
 def wiki_dir() -> Path:
     """Directory holding the built wiki markdown (DISKOS_WIKI_DIR, default 'wiki')."""
     return Path(os.environ.get("DISKOS_WIKI_DIR", "wiki"))
+
+
+def _safe_key(value: str) -> str:
+    """A filesystem-safe well key (no path traversal)."""
+    import re
+
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", (value or "").strip()) or "upload"
 
 
 _NPD_CACHE: dict[str, dict] = {}
@@ -292,6 +299,69 @@ def create_app() -> FastAPI:
             have = fm.wells_by_formation(tops_by_well).get(formation, set())
             points = [{**p, "match": p["borehole_id"] in have} for p in points]
         return {"count": len(points), "points": points}
+
+    @app.post("/api/palyno/upload")
+    async def palyno_upload(
+        file: UploadFile = File(...), well: str = Form(None), user: str = Depends(current_user),
+    ) -> dict:
+        import pandas as pd
+
+        from ..io.stratabugs import parse_stratabugs_simple
+        from ..palyno import reconcile
+        from ..palyno.aggregate import create_wide_format
+        from ..palyno.plot import count_columns
+        from ..palyno.targets import TARGETS
+
+        cfg = load_config()
+        dest = cfg.palyno_path()
+        dest.mkdir(parents=True, exist_ok=True)
+        key = _safe_key(well or Path(file.filename or "upload").stem)
+        tmp = dest / f".{key}.ASC"
+        tmp.write_bytes(await file.read())
+        try:
+            obs = parse_stratabugs_simple(tmp)["observations"]
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Could not parse StrataBugs file: {exc}")
+        finally:
+            tmp.unlink(missing_ok=True)
+        if obs.empty:
+            raise HTTPException(status_code=422, detail="No observations parsed from that file.")
+        available = sorted(obs["taxon_name"].dropna().unique().tolist())
+        decisions = reconcile.Decisions.load(cfg.decisions_path())
+        result = reconcile.resolve_matches(TARGETS, available, decisions)
+        wide = create_wide_format(obs, result.mapping)
+        if wide.empty or wide.shape[1] == 0:
+            raise HTTPException(status_code=422, detail="No target species matched in that file.")
+        wide.to_csv(dest / f"{key}.csv", index=True)
+        species = [c[:-4] for c in count_columns(wide)]
+        return {"well": key, "species": species, "depths": int(wide.shape[0])}
+
+    @app.get("/api/palyno/{well}/plot")
+    def palyno_plot(well: str, species: str = None, user: str = Depends(current_user)) -> dict:
+        import matplotlib
+        matplotlib.use("Agg")
+        import pandas as pd
+
+        from ..palyno import plot as pp
+        from .workflow import _figure_to_data_uri
+
+        csv_path = load_config().palyno_path() / f"{_safe_key(well)}.csv"
+        if not csv_path.is_file():
+            raise HTTPException(status_code=404, detail="No uploaded palynology for that well.")
+        df = pd.read_csv(csv_path)
+        cols = None
+        if species:
+            want = [f"{s.strip()}_cnt" for s in species.split(",") if s.strip()]
+            cols = [c for c in want if c in df.columns]
+        ax = pp.plot_species_vs_depth(df, species_cols=cols, title=f"{well} palynology")
+        return {"well": well, "image": _figure_to_data_uri(ax.figure)}
+
+    @app.get("/api/palyno/{well}/csv")
+    def palyno_csv(well: str, user: str = Depends(current_user)) -> FileResponse:
+        csv_path = load_config().palyno_path() / f"{_safe_key(well)}.csv"
+        if not csv_path.is_file():
+            raise HTTPException(status_code=404, detail="No CSV for that well.")
+        return FileResponse(csv_path, filename=f"{well}_palynology.csv", media_type="text/csv")
 
     @app.get("/api/wiki/search")
     def wiki_search(q: str, user: str = Depends(current_user)) -> dict:
