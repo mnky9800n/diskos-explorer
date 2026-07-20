@@ -285,3 +285,7 @@ a.wikilink:hover { color: #1084d0; }
 /* Map legend */
 .map-legend { background: #c0c0c0; box-shadow: var(--raised); padding: 5px 8px; font-size: 11px; line-height: 1.5; }
 .map-legend .lg-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid; margin-right: 4px; vertical-align: middle; }
+
+/* Map filter bar */
+.map-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 2px; }
+.map-filter .map-yr { width: 80px; }
