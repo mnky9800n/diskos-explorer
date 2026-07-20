@@ -97,6 +97,9 @@ def _well_or_404(well_id: str):
 def _well_logs(well_id: str, mnemonic: str | None) -> list[dict]:
     from ..welllog import curves as wl
 
+    # ``mnemonic`` may be a comma-separated list, so several curves come back as
+    # separate tracks for the side-by-side view; empty means gamma (or first).
+    requested = [m.strip() for m in (mnemonic or "").split(",") if m.strip()]
     files = []
     for las in _well_or_404(well_id).files.get("logs", []):
         try:
@@ -109,9 +112,9 @@ def _well_logs(well_id: str, mnemonic: str | None) -> list[dict]:
             gamma = wl.gamma_column(df)
         except KeyError:
             pass
-        pick = mnemonic if (mnemonic and mnemonic in df.columns) else (gamma or (mnems[0] if mnems else None))
+        picks = [m for m in requested if m in df.columns] if requested else [gamma or (mnems[0] if mnems else None)]
         tracks = []
-        if pick:
+        for pick in [p for p in picks if p]:
             series = df[pick].dropna()
             depths, values = _downsample(list(series.index), [float(v) for v in series.to_numpy()])
             tracks.append({
