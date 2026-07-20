@@ -16,6 +16,8 @@ taxon_decisions = "taxon_decisions.csv"
 npd_dir = "./data/npd"
 # Cached OCR transcripts of scanned reports (gitignored; populated by `diskos ocr`).
 ocr_dir = "./data/ocr"
+# User-uploaded StrataBugs .ASC -> wide palynology CSVs (gitignored).
+palyno_dir = "./data/palyno_uploads"
 
 [llm]
 # Cheap, always-on local model unless a caller explicitly asks for another profile.
