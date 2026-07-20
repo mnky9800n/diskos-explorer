@@ -95,6 +95,23 @@ function renderMapPanel(container, data) {
   head.innerHTML = `<h2>Borehole map</h2><span class="well-sub">${data.count} located boreholes</span>`;
   container.appendChild(head);
 
+  // Filter bar: highlight wells with a formation, and/or restrict by year drilled.
+  const bar = document.createElement("div"); bar.className = "map-filter";
+  const fmSel = document.createElement("select"); fmSel.className = "field";
+  fmSel.innerHTML = `<option value="">highlight formation…</option>`;
+  fetchJSON("/api/formations").then((d) => {
+    for (const f of d.formations) {
+      const o = document.createElement("option"); o.value = f.name; o.textContent = `${f.name} (${f.count})`;
+      fmSel.appendChild(o);
+    }
+  }).catch(() => {});
+  const yMin = document.createElement("input"); yMin.className = "field map-yr"; yMin.placeholder = "from year";
+  const yMax = document.createElement("input"); yMax.className = "field map-yr"; yMax.placeholder = "to year";
+  const applyBtn = document.createElement("button"); applyBtn.className = "btn"; applyBtn.textContent = "Apply";
+  const clearBtn = document.createElement("button"); clearBtn.className = "btn"; clearBtn.textContent = "Clear";
+  bar.append(labelWrap("Formation", fmSel), labelWrap("Drilled", yMin), labelWrap("to", yMax), applyBtn, clearBtn);
+  container.appendChild(bar);
+
   const mapEl = document.createElement("div");
   mapEl.className = "borehole-map";
   container.appendChild(mapEl);
@@ -107,6 +124,7 @@ function renderMapPanel(container, data) {
   }).addTo(map);
 
   const bounds = [];
+  const markerList = [];
   for (const p of data.points) {
     const bio = p.biostrat;
     const marker = L.circleMarker([p.lat, p.lon], {
@@ -115,11 +133,40 @@ function renderMapPanel(container, data) {
       fillColor: bio ? "#ff8c1a" : "#3a7bd5", fillOpacity: 0.85,
     });
     const field = p.field ? " · " + p.field : "";
-    marker.bindTooltip(`${p.borehole_id}${field}`, { direction: "top" });
+    marker.bindTooltip(`${p.borehole_id}${field}${p.year ? " · " + p.year : ""}`, { direction: "top" });
     marker.on("click", () => selectWell(p.borehole_id));
     marker.addTo(map);
     bounds.push([p.lat, p.lon]);
+    markerList.push({ marker, p });
   }
+
+  const applyFilter = async () => {
+    const ymin = parseInt(yMin.value, 10) || null;
+    const ymax = parseInt(yMax.value, 10) || null;
+    let matchSet = null;
+    if (fmSel.value) {
+      try {
+        const d = await fetchJSON("/api/map?formation=" + encodeURIComponent(fmSel.value));
+        matchSet = new Set(d.points.filter((p) => p.match).map((p) => p.borehole_id));
+      } catch (e) { matchSet = new Set(); }
+    }
+    for (const { marker, p } of markerList) {
+      const inYear = (!ymin || (p.year && p.year >= ymin)) && (!ymax || (p.year && p.year <= ymax));
+      const isMatch = !matchSet || matchSet.has(p.borehole_id);
+      const on = inYear && isMatch;
+      marker.setStyle({
+        fillOpacity: on ? 0.9 : 0.06, opacity: on ? 1 : 0.12,
+        radius: on ? (matchSet ? 6 : (p.biostrat ? 5 : 3.5)) : 2,
+      });
+    }
+  };
+  applyBtn.addEventListener("click", applyFilter);
+  clearBtn.addEventListener("click", () => {
+    fmSel.value = ""; yMin.value = ""; yMax.value = "";
+    for (const { marker, p } of markerList) {
+      marker.setStyle({ fillOpacity: 0.85, opacity: 1, radius: p.biostrat ? 5 : 3.5 });
+    }
+  });
 
   const legend = L.control({ position: "bottomright" });
   legend.onAdd = () => {
@@ -272,11 +319,30 @@ function renderWorkflow(container) {
   aForm.placeholder = "formation, e.g. BRENT GP";
   const aTop = document.createElement("input"); aTop.className = "field"; aTop.placeholder = "top m";
   const aBot = document.createElement("input"); aBot.className = "field"; aBot.placeholder = "bottom m";
+  // Formation-first: pick a formation and it fills the wells that actually have it.
+  const aPick = document.createElement("select"); aPick.className = "field";
+  aPick.innerHTML = `<option value="">pick a formation to auto-fill wells…</option>`;
+  fetchJSON("/api/formations").then((d) => {
+    for (const f of d.formations) {
+      const o = document.createElement("option"); o.value = f.name; o.textContent = `${f.name} (${f.count})`;
+      aPick.appendChild(o);
+    }
+  }).catch(() => {});
+  aPick.addEventListener("change", async () => {
+    if (!aPick.value) return;
+    aForm.value = aPick.value;
+    try {
+      const d = await fetchJSON("/api/corpus/find?formation=" + encodeURIComponent(aPick.value));
+      aWells.value = d.wells.slice(0, 12).map((w) => w.well_id).join(", ");
+    } catch (e) { /* leave wells as-is */ }
+  });
+  const aRow0 = document.createElement("div"); aRow0.className = "wf-row";
+  aRow0.append(labelWrap("Formation-first", aPick));
   const aRow1 = document.createElement("div"); aRow1.className = "wf-row";
   aRow1.append(labelWrap("Wells", aWells), labelWrap("Formation", aForm));
   const aRow2 = document.createElement("div"); aRow2.className = "wf-row";
   aRow2.append(labelWrap("or depth", aTop), labelWrap("to", aBot));
-  anode.body.append(aRow1, aRow2);
+  anode.body.append(aRow0, aRow1, aRow2);
   const aBtn = document.createElement("button"); aBtn.className = "btn"; aBtn.textContent = "Analyse ▸";
   const aBar = document.createElement("div"); aBar.className = "ask-bar"; aBar.appendChild(aBtn);
   anode.body.appendChild(aBar);
@@ -395,16 +461,25 @@ function renderCorpusPanel(container, stats) {
   const quad = document.createElement("input");
   quad.className = "field finder-q";
   quad.placeholder = "quadrant (e.g. 35)";
+  const formSel = document.createElement("select"); formSel.className = "field";
+  formSel.innerHTML = `<option value="">any formation</option>`;
+  fetchJSON("/api/formations").then((d) => {
+    for (const f of d.formations) {
+      const o = document.createElement("option"); o.value = f.name; o.textContent = `${f.name} (${f.count})`;
+      formSel.appendChild(o);
+    }
+  }).catch(() => {});
   const bioLbl = document.createElement("label"); const bio = document.createElement("input"); bio.type = "checkbox"; bioLbl.append(bio, document.createTextNode(" biostrat"));
   const coreLbl = document.createElement("label"); const core = document.createElement("input"); core.type = "checkbox"; coreLbl.append(core, document.createTextNode(" core"));
   const findBtn = document.createElement("button"); findBtn.className = "btn"; findBtn.textContent = "Find";
-  finder.append(typeSel, quad, bioLbl, coreLbl, findBtn);
+  finder.append(typeSel, formSel, quad, bioLbl, coreLbl, findBtn);
   container.appendChild(finder);
   const results = document.createElement("div"); results.className = "finder-results"; container.appendChild(results);
 
   const doFind = async () => {
     const params = new URLSearchParams();
     if (typeSel.value) params.set("type", typeSel.value);
+    if (formSel.value) params.set("formation", formSel.value);
     if (quad.value.trim()) params.set("quadrant", quad.value.trim());
     if (bio.checked) params.set("biostrat", "true");
     if (core.checked) params.set("core", "true");

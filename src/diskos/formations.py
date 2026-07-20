@@ -72,6 +72,35 @@ def load_formation_tops(npd_dir: str | Path) -> dict[str, list[FormationTop]]:
     return out
 
 
+def wells_by_formation(tops_by_well: dict[str, list[FormationTop]]) -> dict[str, set[str]]:
+    """Invert the tops table: {formation name -> set of wellbore names that have it}."""
+    out: dict[str, set[str]] = {}
+    for well, tops in tops_by_well.items():
+        for unit in tops:
+            out.setdefault(unit.name, set()).add(well)
+    return out
+
+
+def all_formations(tops_by_well: dict[str, list[FormationTop]], level: str | None = None) -> list[dict]:
+    """Distinct formations with their level and how many wells have each, most common first."""
+    counts: dict[str, int] = {}
+    levels: dict[str, str] = {}
+    for tops in tops_by_well.values():
+        seen: set[str] = set()
+        for unit in tops:
+            if level and unit.level != level.upper():
+                continue
+            if unit.name in seen:
+                continue
+            seen.add(unit.name)
+            counts[unit.name] = counts.get(unit.name, 0) + 1
+            levels[unit.name] = unit.level
+    return sorted(
+        ({"name": n, "level": levels[n], "count": counts[n]} for n in counts),
+        key=lambda d: (-d["count"], d["name"]),
+    )
+
+
 def tops_for(
     tops_by_well: dict[str, list[FormationTop]],
     borehole_id: str,

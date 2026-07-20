@@ -172,15 +172,28 @@ def create_app() -> FastAPI:
         index = corpus.build_index(diskos_root(load_config()))
         return corpus.stats(index)
 
+    @app.get("/api/formations")
+    def formations_list(level: str = None, user: str = Depends(current_user)) -> dict:
+        from .. import formations as fm
+
+        tops_by_well, _ = _tops_and_records()
+        return {"formations": fm.all_formations(tops_by_well, level=level)}
+
     @app.get("/api/corpus/find")
     def corpus_find(
         type: str = None, biostrat: bool = False, core: bool = False, quadrant: str = None,
-        user: str = Depends(current_user),
+        formation: str = None, user: str = Depends(current_user),
     ) -> dict:
         from . import corpus
 
         index = corpus.build_index(diskos_root(load_config()))
         matches = corpus.find(index, data_type=type, biostrat=biostrat or None, core=core or None, quadrant=quadrant)
+        if formation:
+            from .. import formations as fm
+
+            tops_by_well, _ = _tops_and_records()
+            have = fm.wells_by_formation(tops_by_well).get(formation, set())
+            matches = [m for m in matches if m["well_id"] in have]
         return {"count": len(matches), "wells": matches}
 
     @app.post("/api/corpus/ask")
@@ -255,13 +268,26 @@ def create_app() -> FastAPI:
         return out
 
     @app.get("/api/map")
-    def wells_map(user: str = Depends(current_user)) -> dict:
+    def wells_map(formation: str = None, user: str = Depends(current_user)) -> dict:
+        from .. import npd as npd_mod
         from ..wiki.mapdata import map_points
 
         key = str(wiki_dir())
         if key not in _MAP_CACHE:
-            _MAP_CACHE[key] = map_points(wiki_dir())
+            pts = map_points(wiki_dir())
+            _tops, records = _tops_and_records()
+            for p in pts:  # enrich once with NPD year (drilled) + well type for filters
+                rec = npd_mod.match(records, p["borehole_id"])
+                p["year"] = rec.year if rec else None
+                p["well_type"] = rec.well_type if rec else None
+            _MAP_CACHE[key] = pts
         points = _MAP_CACHE[key]
+        if formation:  # flag which wells have the chosen formation
+            from .. import formations as fm
+
+            tops_by_well, _ = _tops_and_records()
+            have = fm.wells_by_formation(tops_by_well).get(formation, set())
+            points = [{**p, "match": p["borehole_id"] in have} for p in points]
         return {"count": len(points), "points": points}
 
     @app.get("/api/wiki/search")

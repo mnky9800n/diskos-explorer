@@ -50,8 +50,12 @@ class Config:
         return path
 
     def npd_path(self) -> Path:
-        """Absolute path to the cached Sodir/NPD FactPages CSV directory."""
-        path = Path(self.npd_dir)
+        """Absolute path to the cached Sodir/NPD FactPages CSV directory.
+
+        ``DISKOS_NPD_DIR`` overrides config (parity with ``DISKOS_ROOT``).
+        """
+        override = os.environ.get("DISKOS_NPD_DIR")
+        path = Path(override) if override else Path(self.npd_dir)
         if not path.is_absolute():
             path = self.project_root / path
         return path

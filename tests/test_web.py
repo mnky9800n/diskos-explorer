@@ -158,6 +158,38 @@ def test_compare_endpoint_reports_missing(client):
     assert d["missing"] == ["nope_9-9"]
 
 
+def test_formation_first_and_map_filters(monkeypatch, tmp_path):
+    from diskos.wiki.build import build_wiki
+
+    NPD_SAMPLE = Path(__file__).parent / "data" / "npd_sample"
+    build_wiki(SAMPLE_ROOT, tmp_path, scope="all", npd_dir=NPD_SAMPLE)
+
+    monkeypatch.setenv("DISKOS_WEB_DEV", "1")
+    monkeypatch.setenv("DISKOS_ROOT", str(SAMPLE_ROOT))
+    monkeypatch.setenv("DISKOS_WIKI_DIR", str(tmp_path))
+    monkeypatch.setenv("DISKOS_NPD_DIR", str(NPD_SAMPLE))
+    monkeypatch.delenv("DISKOS_ALLOWLIST", raising=False)
+    from diskos.web.api import _MAP_CACHE, _TOPS_CACHE, create_app
+
+    _MAP_CACHE.clear(); _TOPS_CACHE.clear()  # avoid cross-test path caching
+    c = TestClient(create_app())
+
+    # formation list for dropdowns
+    fms = [f["name"] for f in c.get("/api/formations").json()["formations"]]
+    assert "BALDER FM" in fms
+
+    # formation-filtered corpus find -> only wells that have it
+    d = c.get("/api/corpus/find", params={"formation": "BALDER FM"}).json()
+    assert [w["well_id"] for w in d["wells"]] == ["7_11-1"]
+
+    # map points carry the drilled year; formation param flags matches
+    m = c.get("/api/map", params={"formation": "BALDER FM"}).json()
+    by_id = {p["borehole_id"]: p for p in m["points"]}
+    assert by_id["7_11-1"]["year"] == 1989
+    assert by_id["7_11-1"]["match"] is True
+    assert by_id["25_7-5"]["match"] is False
+
+
 def test_analyze_endpoint_interval(client):
     # An explicit interval needs no formation-tops table, so it works in the test env.
     r = client.get("/api/analyze", params={"wells": "7_11-1", "top": 1000, "bottom": 1005})

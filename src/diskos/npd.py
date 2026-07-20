@@ -56,6 +56,7 @@ class NpdRecord:
     operator: str | None
     purpose: str | None
     content: str | None
+    year: int | None  # entry (spud) year, for map filtering by date drilled
 
 
 def _url(table: str) -> str:
@@ -112,6 +113,14 @@ def _pick(row: dict, *keys: str) -> str | None:
     return None
 
 
+def _year(value: str | None) -> int | None:
+    """Year from a Sodir date like '20.03.1989', else None."""
+    if not value:
+        return None
+    tail = value.strip().split(".")[-1]
+    return int(tail) if tail.isdigit() and len(tail) == 4 else None
+
+
 def _record_from_row(row: dict) -> NpdRecord | None:
     name = _pick(row, "wlbWellboreName")
     if not name:
@@ -127,6 +136,7 @@ def _record_from_row(row: dict) -> NpdRecord | None:
         operator=_pick(row, "wlbDrillingOperator"),
         purpose=_pick(row, "wlbPurpose", "wlbPurposePlanned"),
         content=_pick(row, "wlbContent"),
+        year=_year(_pick(row, "wlbEntryDate", "wlbCompletionDate", "wlbEntryYear")),
     )
 
 
