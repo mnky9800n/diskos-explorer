@@ -159,7 +159,7 @@ def _locus_line(loc: dict, npd: dict | None, sidetracks: list[str]) -> str:
     return ". ".join(parts) + "." if parts else "Location not resolved from the mirror or NPD."
 
 
-def render_borehole_page(dossier: dict, on_date: str, prose: str = "") -> str:
+def render_borehole_page(dossier: dict, on_date: str, prose: str = "", biostrat_summary: str = "") -> str:
     """Render an IODP-style borehole page from a dossier. Model-free by default."""
     bid = dossier["borehole_id"]
     loc = dossier["location"]
@@ -215,17 +215,33 @@ def render_borehole_page(dossier: dict, on_date: str, prose: str = "") -> str:
     else:
         lines.append("No well logs in the mirror.")
 
-    lines += ["", "## Palynology", ""]
+    # Palynology and biostratigraphy are the same discipline (the "bio" of
+    # biostrat is palynology), so they share one section: any structured counts
+    # (from a StrataBugs CSV) plus the report's zonation, summarized.
+    lines += ["", "## Palynology / biostratigraphy", ""]
     paly = dossier.get("palynology")
+    has_paleo = False
     if paly:
-        lines.append(f"Palynology from `{paly.get('source', 'CSV')}`, {paly['n_depths']} sampled depths.")
+        has_paleo = True
+        lines.append(f"Palynology counts from `{paly.get('source', 'CSV')}`, {paly['n_depths']} sampled depths.")
         lines += ["", "| species | total count |", "| --- | --- |"]
         for species in paly["species"]:
             lines.append(f"| [[{species.replace('_', ' ')}]] | {paly['totals'][species]:.0f} |")
         if not paly["species"]:
             lines.append("| (none matched) | |")
-    else:
-        lines.append("No palynology data ingested for this borehole.")
+        lines.append("")
+    bio = biostrat_summary or dossier.get("biostrat_text")
+    if bio:
+        has_paleo = True
+        if biostrat_summary:
+            lines += [biostrat_summary, ""]
+        else:
+            lines += ["Report text (unsummarised):", "", bio, ""]
+        bfiles = [r["file"] for r in dossier["reports"] if r.get("biostrat")]
+        if bfiles:
+            lines.append("Full report: " + ", ".join(f"`{f}`" for f in bfiles))
+    if not has_paleo:
+        lines.append("No palynology or biostratigraphy data in the local mirror.")
 
     lines += ["", "## Reports", ""]
     if dossier["reports"]:
@@ -242,12 +258,6 @@ def render_borehole_page(dossier: dict, on_date: str, prose: str = "") -> str:
             lines.append(f"- [{tag}] {rep['file']}{note}")
     else:
         lines.append("No report in the local mirror.")
-
-    biostrat_text = dossier.get("biostrat_text")
-    if biostrat_text:
-        lines += ["", "## Biostratigraphy", "",
-                  "Text from the biostratigraphy report (scanned reports transcribed via OCR):",
-                  "", biostrat_text]
 
     lines += ["", "## Related", ""]
     if dossier["sidetracks"]:
@@ -301,6 +311,18 @@ def borehole_prompt(dossier: dict) -> str:
     )
 
 
+def biostrat_prompt(dossier: dict) -> str:
+    """Prompt to summarize the biostrat report text into the key events only."""
+    text = dossier.get("biostrat_text", "")
+    return (
+        f"Summarize this biostratigraphy report for borehole {dossier['borehole_id']} "
+        f"for a geologist. Give the age/zonation with depths (a short bulleted list) and "
+        f"any key bioevents (first/last occurrences, acmes) with their depths. Drop "
+        f"boilerplate, methods, and author/admin lines. Use only what is in the text, "
+        f"invent nothing, keep numbers exact. No em dashes.\n\nREPORT TEXT:\n{text[:6000]}"
+    )
+
+
 def ingest_borehole(
     dossier: dict,
     wiki_dir: str | Path,
@@ -327,13 +349,19 @@ def ingest_borehole(
             return None
 
     prose = ""
+    biostrat_summary = ""
     if client is not None:
         try:
             prose = client.ask(borehole_prompt(dossier), max_tokens=400, temperature=0.2).strip()
         except Exception:
             prose = ""
+        if dossier.get("biostrat_text"):
+            try:
+                biostrat_summary = client.ask(biostrat_prompt(dossier), max_tokens=500, temperature=0.2).strip()
+            except Exception:
+                biostrat_summary = ""
 
-    page = render_borehole_page(dossier, on_date, prose)
+    page = render_borehole_page(dossier, on_date, prose, biostrat_summary)
     (wiki_dir / ENTITIES).mkdir(parents=True, exist_ok=True)
     page_path.write_text(page, encoding="utf-8")
 

@@ -50,9 +50,17 @@ def test_dossier_picks_up_cached_ocr(tmp_path):
     assert "Apectodinium" in enriched["biostrat_text"]
     from diskos.wiki.ingest import render_borehole_page
 
+    # Without a client, the raw biostrat text is shown under the merged section.
     page = render_borehole_page(enriched, on_date="2026-01-01")
-    assert "## Biostratigraphy" in page
+    assert "## Palynology / biostratigraphy" in page
     assert "Apectodinium homomorphum acme" in page
+
+    # With a summary (from the LLM), the section shows the summary, not the dump.
+    summarized = render_borehole_page(
+        enriched, on_date="2026-01-01", biostrat_summary="Eocene acme of Apectodinium at 2040 m."
+    )
+    assert "Eocene acme of Apectodinium at 2040 m." in summarized
+    assert "Report text (unsummarised)" not in summarized
 
 
 def test_no_biostrat_text_key_when_absent():

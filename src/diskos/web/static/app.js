@@ -92,7 +92,7 @@ function renderMapPanel(container, data) {
   setStatus("Map", `${data.count} located boreholes`);
   const head = document.createElement("div");
   head.className = "well-head";
-  head.innerHTML = `<h2>Borehole map</h2><span class="well-sub">${data.count} located boreholes &middot; orange marks a biostrat report</span>`;
+  head.innerHTML = `<h2>Borehole map</h2><span class="well-sub">${data.count} located boreholes</span>`;
   container.appendChild(head);
 
   const mapEl = document.createElement("div");
@@ -120,6 +120,17 @@ function renderMapPanel(container, data) {
     marker.addTo(map);
     bounds.push([p.lat, p.lon]);
   }
+
+  const legend = L.control({ position: "bottomright" });
+  legend.onAdd = () => {
+    const div = document.createElement("div");
+    div.className = "map-legend";
+    div.innerHTML =
+      '<div><span class="lg-dot" style="background:#ff8c1a;border-color:#a5480a"></span> has palynology / biostrat report</div>' +
+      '<div><span class="lg-dot" style="background:#3a7bd5;border-color:#12305e"></span> no report</div>';
+    return div;
+  };
+  legend.addTo(map);
   // The container was just inserted, so its size is not laid out yet. Recompute
   // the size first, THEN fit the bounds, otherwise fitBounds zooms against a
   // zero-size box and lands on an empty patch with every marker off-screen.
@@ -498,7 +509,7 @@ function renderWell(detail) {
   tabs.push({ label: "Wiki", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/wiki`), render: renderWikiPanel });
   tabs.push({ label: "Assistant", render: (c) => renderAssistantPanel(c, detail) });
   if (detail.counts.logs) tabs.push({ label: "Well logs", render: (c) => renderLogsPanel(c, id) });
-  if (detail.counts.geology) tabs.push({ label: "Graph", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/graph`), render: renderGraphPanel });
+  if (detail.counts.geology) tabs.push({ label: "Report links", load: () => fetchJSON(`/api/wells/${encodeURIComponent(id)}/graph`), render: renderGraphPanel });
   tabs.push({ label: "Files", render: (c) => renderFilesPanel(c, detail) });
   buildTabs(panel, tabs);
 }
@@ -725,7 +736,8 @@ function renderGraphPanel(container, data) {
   const dataNodes = data.nodes.filter((n) => n.kind !== "report");
   if (!reports.length) { container.appendChild(msg("No reports to graph for this well.")); return; }
 
-  container.appendChild(sectionLabel("Report ↔ data connections (click a node to focus its links)"));
+  container.appendChild(sectionLabel("Which reports attach to which data files"));
+  container.appendChild(msg("This shows how each report links to the well's data (a report's studied depth interval overlapping a log, or a mention of core). It is not an x-y crossplot. Click a node to focus its links."));
   const wrap = document.createElement("div");
   wrap.className = "graph-wrap";
   container.appendChild(wrap);
